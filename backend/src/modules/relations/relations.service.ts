@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../../database/database.constants';
 import { AuditService } from '../audit/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { ColumnProfilerService } from './column-profiler.service';
 
 export type RelationStatus = 'proposed' | 'validated' | 'rejected';
@@ -66,6 +67,7 @@ export class RelationsService {
     @Inject(KNEX_CONNECTION) private readonly knex: Knex,
     private readonly profiler: ColumnProfilerService,
     private readonly auditService: AuditService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   /** Delegates the scoring itself to the Python relation-detection service (name similarity, type, cardinality, Jaccard/containment). */
@@ -145,9 +147,26 @@ export class RelationsService {
   }
 
   async reject(relationId: string, adminUserId: string): Promise<DetectedRelation> {
-    // TODO: once ViewsService persists real views, cascade any view built on this relation to
-    // status "à corriger" and notify its owner, per the spec's rejection-after-save requirement.
-    return this.setStatus(relationId, 'rejected', adminUserId);
+    const relation = await this.setStatus(relationId, 'rejected', adminUserId);
+    await this.notifyAffectedViewOwners(relation);
+    return relation;
+  }
+
+  /**
+   * A view's relationStatus is derived live (see ViewsService.computeRelationStatus), so it flips
+   * to "à corriger" automatically — no view row needs updating here. What still requires an
+   * explicit action is telling the owner, per the spec's "notifié dans l'interface" requirement.
+   */
+  private async notifyAffectedViewOwners(relation: DetectedRelation): Promise<void> {
+    const affectedViews = await this.knex('views').whereRaw('relation_ids @> ?::jsonb', [JSON.stringify([relation.id])]);
+
+    for (const view of affectedViews) {
+      await this.notificationsService.notify({
+        recipientUserId: view.owner_id,
+        subject: `Vue "${view.name}" à corriger`,
+        body: `La relation ${relation.sourceTable}.${relation.sourceColumn} ↔ ${relation.targetTable}.${relation.targetColumn} utilisée par cette vue a été rejetée par un administrateur.`,
+      });
+    }
   }
 
   private async setStatus(relationId: string, status: RelationStatus, adminUserId: string): Promise<DetectedRelation> {
