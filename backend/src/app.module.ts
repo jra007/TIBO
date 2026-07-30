@@ -3,6 +3,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AdminModule } from './modules/admin/admin.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { DashboardsModule } from './modules/dashboards/dashboards.module';
 import { ExportsModule } from './modules/exports/exports.module';
@@ -14,6 +15,7 @@ import { ViewsModule } from './modules/views/views.module';
 
 @Module({
   imports: [
+    DatabaseModule,
     AuditModule,
     RbacModule,
     AuthModule,

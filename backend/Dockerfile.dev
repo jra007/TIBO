@@ -7,4 +7,4 @@ RUN npm install
 
 COPY . .
 
-CMD ["npm", "run", "start:dev"]
+CMD ["sh", "-c", "npm run db:migrate && npm run start:dev"]
