@@ -8,6 +8,6 @@ import { RelationsService } from './relations.service';
   imports: [NotificationsModule],
   controllers: [RelationsController],
   providers: [RelationsService, ColumnProfilerService],
-  exports: [RelationsService],
+  exports: [RelationsService, ColumnProfilerService],
 })
 export class RelationsModule {}

@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
+import { CURRENT_USER_ID } from '../../auth/currentUser';
 import { apiClient } from '../../api/client';
 import type { DetectedRelation } from '../../api/types';
-
-// TODO: replace with the authenticated admin's id once auth is wired up.
-const CURRENT_ADMIN_USER_ID = 'admin-local';
 
 const STATUS_LABELS: Record<DetectedRelation['status'], string> = {
   proposed: 'Proposée',
@@ -45,7 +43,7 @@ export function RelationsReviewPage() {
   }
 
   async function act(relation: DetectedRelation, action: 'validate' | 'reject') {
-    await apiClient.post(`/relations/${relation.id}/${action}`, { adminUserId: CURRENT_ADMIN_USER_ID });
+    await apiClient.post(`/relations/${relation.id}/${action}`, { adminUserId: CURRENT_USER_ID });
     await refresh();
   }
 

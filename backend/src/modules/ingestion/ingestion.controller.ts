@@ -1,5 +1,6 @@
-import { Controller, Post, UploadedFiles, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, UploadedFiles, UseInterceptors } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
+import { ColumnProfilerService } from '../relations/column-profiler.service';
 import { RelationsService } from '../relations/relations.service';
 import { IngestionService } from './ingestion.service';
 
@@ -8,6 +9,7 @@ export class IngestionController {
   constructor(
     private readonly ingestionService: IngestionService,
     private readonly relationsService: RelationsService,
+    private readonly columnProfiler: ColumnProfilerService,
   ) {}
 
   @Post('upload')
@@ -17,5 +19,11 @@ export class IngestionController {
     const importedTables = imports.filter((r) => r.status === 'success').map((r) => r.tableName);
     const relations = importedTables.length > 0 ? await this.relationsService.detectRelations() : [];
     return { imports, relations };
+  }
+
+  /** Table+column listing (no profiling) for the view builder's field picker. */
+  @Get('tables')
+  listTables() {
+    return this.columnProfiler.listTableSchemas();
   }
 }

@@ -33,6 +33,28 @@ export class ColumnProfilerService {
     return rows.map((row: { table_name: string }) => row.table_name);
   }
 
+  /** Lightweight table+column listing (no row counts/samples) for UI field pickers. */
+  async listTableSchemas(): Promise<{ tableName: string; columns: { columnName: string; dtype: ColumnType }[] }[]> {
+    const tableNames = await this.listSourceTables();
+    const result: { tableName: string; columns: { columnName: string; dtype: ColumnType }[] }[] = [];
+    for (const tableName of tableNames) {
+      const { rows: columns } = await this.knex.raw(
+        `SELECT column_name, data_type FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = ? AND column_name <> 'id'
+         ORDER BY ordinal_position`,
+        [tableName],
+      );
+      result.push({
+        tableName,
+        columns: (columns as { column_name: string; data_type: string }[]).map((column) => ({
+          columnName: column.column_name,
+          dtype: mapPgType(column.data_type),
+        })),
+      });
+    }
+    return result;
+  }
+
   async profileTables(tableNames: string[]): Promise<ColumnProfile[]> {
     const profiles: ColumnProfile[] = [];
     for (const tableName of tableNames) {
