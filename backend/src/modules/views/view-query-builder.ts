@@ -1,17 +1,5 @@
 import type { Knex } from 'knex';
-
-interface FieldRef {
-  tableName: string;
-  columnName: string;
-}
-
-interface ShelfDefinition {
-  rows: FieldRef[];
-  columns: FieldRef[];
-  color: FieldRef[];
-  size: FieldRef[];
-  filters: FieldRef[];
-}
+import type { ShelfDefinition } from './views.service';
 
 interface RelationRow {
   source_table: string;
@@ -20,9 +8,9 @@ interface RelationRow {
   target_column: string;
 }
 
-function dedupeFields(fields: FieldRef[]): FieldRef[] {
+function dedupeFields(fields: ShelfDefinition['rows']): ShelfDefinition['rows'] {
   const seen = new Set<string>();
-  const result: FieldRef[] = [];
+  const result: ShelfDefinition['rows'] = [];
   for (const field of fields) {
     const key = `${field.tableName}.${field.columnName}`;
     if (!seen.has(key)) {
@@ -37,7 +25,7 @@ function dedupeFields(fields: FieldRef[]): FieldRef[] {
  * Builds the query for "the underlying data of a view": a plain projection of the columns
  * placed in rows/columns/color/size, joined across tables via the relations pinned on the view
  * at creation time (ViewsService.pinRelationsForTablePairs). No aggregation yet — shelves don't
- * carry a per-field aggregation config, so this exports raw rows, not summed/averaged measures.
+ * carry a per-field aggregation config, so this returns raw rows, not summed/averaged measures.
  * The `filters` shelf has no stored values/operators yet either, so it's excluded here too.
  */
 export async function buildViewDataQuery(
@@ -46,7 +34,7 @@ export async function buildViewDataQuery(
   relationIds: string[],
 ): Promise<{ headers: string[]; query: Knex.QueryBuilder }> {
   const fields = dedupeFields([...shelves.rows, ...shelves.columns, ...shelves.color, ...shelves.size]);
-  if (fields.length === 0) throw new Error('Cette vue ne contient aucun champ à exporter');
+  if (fields.length === 0) throw new Error('Cette vue ne contient aucun champ à afficher');
 
   const tables = [...new Set(fields.map((f) => f.tableName))];
   const relations: RelationRow[] = relationIds.length > 0 ? await knex('detected_relations').whereIn('id', relationIds) : [];

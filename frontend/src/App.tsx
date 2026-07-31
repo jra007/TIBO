@@ -5,6 +5,7 @@ import { RequirePermissionRoute } from './auth/RequirePermissionRoute';
 import { AppLayout } from './layout/AppLayout';
 import { LoginPage } from './pages/LoginPage';
 import { ViewsPage } from './pages/ViewsPage';
+import { ViewDetailPage } from './pages/ViewDetailPage';
 import { DashboardsPage } from './pages/DashboardsPage';
 import { ViewBuilderPage } from './pages/view-builder/ViewBuilderPage';
 import { AdminLayout } from './pages/admin/AdminLayout';
@@ -31,6 +32,7 @@ function App() {
           <Route index element={<Navigate to="/views" replace />} />
           <Route path="/views" element={<ViewsPage />} />
           <Route path="/views/new" element={<ViewBuilderPage />} />
+          <Route path="/views/:id" element={<ViewDetailPage />} />
           <Route path="/dashboards" element={<DashboardsPage />} />
           <Route
             path="/admin"

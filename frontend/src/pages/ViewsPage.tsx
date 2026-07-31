@@ -40,7 +40,9 @@ function ViewRow({ view, onShared }: { view: SavedView; onShared: () => void }) 
 
   return (
     <tr>
-      <td>{view.name}</td>
+      <td>
+        <Link to={`/views/${view.id}`}>{view.name}</Link>
+      </td>
       <td>{view.chartType}</td>
       <td>{view.visibility === 'private' ? 'Privée' : `Partagée (${view.sharedWithGroupId})`}</td>
       <td>{RELATION_STATUS_LABELS[view.relationStatus]}</td>

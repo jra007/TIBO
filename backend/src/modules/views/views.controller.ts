@@ -31,6 +31,12 @@ export class ViewsController {
     return this.viewsService.getById(id);
   }
 
+  @Get(':id/data')
+  @RequirePermission('view:read')
+  getData(@Param('id') id: string) {
+    return this.viewsService.getData(id);
+  }
+
   @Post(':id/share')
   @RequirePermission('view:share')
   share(@Param('id') id: string, @Body('groupId') groupId: string) {

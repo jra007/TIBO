@@ -3,7 +3,7 @@ import type { Knex } from 'knex';
 import * as XLSX from 'xlsx';
 import { KNEX_CONNECTION } from '../../database/database.constants';
 import { AuditService } from '../audit/audit.service';
-import { buildViewDataQuery } from './view-query-builder';
+import { buildViewDataQuery } from '../views/view-query-builder';
 
 @Injectable()
 export class ExportsService {

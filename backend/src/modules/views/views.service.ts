@@ -1,6 +1,7 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../../database/database.constants';
+import { buildViewDataQuery } from './view-query-builder';
 
 export type ChartType = 'bar' | 'line' | 'scatter' | 'heatmap' | 'table' | 'geo';
 export type ViewVisibility = 'private' | 'shared';
@@ -89,6 +90,16 @@ export class ViewsService {
       .where({ shared_with_group_id: groupId, visibility: 'shared' })
       .orderBy('created_at', 'desc');
     return Promise.all(rows.map((row) => this.toDomain(row)));
+  }
+
+  /** Raw underlying data (headers + rows) for live chart/table rendering — see view-query-builder for the no-aggregation caveat. */
+  async getData(viewId: string): Promise<{ headers: string[]; rows: Record<string, unknown>[] }> {
+    const row: ViewRow | undefined = await this.knex('views').where({ id: viewId }).first();
+    if (!row) throw new NotFoundException(`View ${viewId} not found`);
+
+    const { headers, query } = await buildViewDataQuery(this.knex, row.shelves, row.relation_ids);
+    const rows = await query;
+    return { headers, rows };
   }
 
   /** Requires view:share in addition to view:create — kept as a distinct permission per spec. */
