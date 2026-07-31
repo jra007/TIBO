@@ -515,6 +515,30 @@ tbody tr:hover {
   cursor: grab;
 }
 
+.field-chip small {
+  color: var(--ink-muted);
+  font-size: 11px;
+}
+
+.field-chip button {
+  background: transparent;
+  color: var(--ink-muted);
+  padding: 0 2px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.field-chip button:hover:not(:disabled) {
+  color: var(--accent);
+  background: transparent;
+}
+
+.field-chip form input {
+  font-size: 13px;
+  padding: 4px 6px;
+  max-width: 100%;
+}
+
 .shelves {
   display: flex;
   flex-direction: column;

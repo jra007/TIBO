@@ -1,5 +1,7 @@
-import { Controller, Get, Post, UploadedFiles, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Req, UploadedFiles, UseInterceptors } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
+import type { AuthenticatedRequest } from '../auth/authenticated-request';
+import { RequirePermission } from '../rbac/decorators/require-permission.decorator';
 import { ColumnProfilerService } from '../relations/column-profiler.service';
 import { RelationsService } from '../relations/relations.service';
 import { IngestionService } from './ingestion.service';
@@ -25,5 +27,17 @@ export class IngestionController {
   @Get('tables')
   listTables() {
     return this.columnProfiler.listTableSchemas();
+  }
+
+  /** Cosmetic display label for a column, for readability in the builder/charts/exports — doesn't rename the underlying data. */
+  @Put('tables/:tableName/columns/:columnName/label')
+  @RequirePermission('view:create')
+  setColumnLabel(
+    @Param('tableName') tableName: string,
+    @Param('columnName') columnName: string,
+    @Body('label') label: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.ingestionService.setColumnLabel(tableName, columnName, label, req.user.id);
   }
 }

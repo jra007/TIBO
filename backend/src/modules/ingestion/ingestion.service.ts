@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../../database/database.constants';
+import { setLabel } from '../views/column-labels';
 import { inferColumnTypes, normalizeColumnName, normalizeTableName, normalizeValue, parseSpreadsheet } from './parsing';
 
 export type ColumnType = 'text' | 'date' | 'numeric' | 'boolean';
@@ -80,6 +81,11 @@ export class IngestionService {
 
     if (records.length > 0) await this.knex.batchInsert(tableName, records, BATCH_SIZE);
     return records.length;
+  }
+
+  /** Cosmetic display name for a column — doesn't touch the underlying data or schema. */
+  async setColumnLabel(tableName: string, columnName: string, label: string, actorUserId: string): Promise<void> {
+    await setLabel(this.knex, tableName, columnName, label, actorUserId);
   }
 
   private async writeJournalEntry(result: IngestionResult, fileHash: string): Promise<void> {

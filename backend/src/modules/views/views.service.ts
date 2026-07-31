@@ -120,13 +120,13 @@ export class ViewsService {
   }
 
   /** Raw underlying data (headers + rows) for live chart/table rendering — see view-query-builder for the no-aggregation caveat. */
-  async getData(viewId: string): Promise<{ headers: string[]; rows: Record<string, unknown>[] }> {
+  async getData(viewId: string): Promise<{ headers: string[]; headerLabels: string[]; rows: Record<string, unknown>[] }> {
     const row: ViewRow | undefined = await this.knex('views').where({ id: viewId }).first();
     if (!row) throw new NotFoundException(`View ${viewId} not found`);
 
-    const { headers, query, mapRow } = await buildViewDataQuery(this.knex, row.shelves, row.relation_ids);
+    const { headers, headerLabels, query, mapRow } = await buildViewDataQuery(this.knex, row.shelves, row.relation_ids);
     const rows = await query;
-    return { headers, rows: rows.map(mapRow) };
+    return { headers, headerLabels, rows: rows.map(mapRow) };
   }
 
   /** Requires view:share in addition to view:create — kept as a distinct permission per spec. */

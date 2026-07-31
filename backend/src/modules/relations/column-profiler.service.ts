@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../../database/database.constants';
+import { getLabelsForTable } from '../views/column-labels';
 import type { ColumnType } from '../ingestion/ingestion.service';
 
 export interface ColumnProfile {
@@ -34,9 +35,9 @@ export class ColumnProfilerService {
   }
 
   /** Lightweight table+column listing (no row counts/samples) for UI field pickers. */
-  async listTableSchemas(): Promise<{ tableName: string; columns: { columnName: string; dtype: ColumnType }[] }[]> {
+  async listTableSchemas(): Promise<{ tableName: string; columns: { columnName: string; dtype: ColumnType; label: string | null }[] }[]> {
     const tableNames = await this.listSourceTables();
-    const result: { tableName: string; columns: { columnName: string; dtype: ColumnType }[] }[] = [];
+    const result: { tableName: string; columns: { columnName: string; dtype: ColumnType; label: string | null }[] }[] = [];
     for (const tableName of tableNames) {
       const { rows: columns } = await this.knex.raw(
         `SELECT column_name, data_type FROM information_schema.columns
@@ -44,11 +45,13 @@ export class ColumnProfilerService {
          ORDER BY ordinal_position`,
         [tableName],
       );
+      const labels = await getLabelsForTable(this.knex, tableName);
       result.push({
         tableName,
         columns: (columns as { column_name: string; data_type: string }[]).map((column) => ({
           columnName: column.column_name,
           dtype: mapPgType(column.data_type),
+          label: labels.get(column.column_name) ?? null,
         })),
       });
     }

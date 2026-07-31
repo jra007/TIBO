@@ -1,5 +1,5 @@
 import { useDroppable } from '@dnd-kit/core';
-import type { Aggregation, Field, ShelfId } from './shelves';
+import { displayLabel, type Aggregation, type Field, type ShelfId } from './shelves';
 
 const AGGREGATION_LABELS: Record<Aggregation, string> = {
   sum: 'Somme',
@@ -30,12 +30,12 @@ export function ShelfDropZone({
       <ul>
         {fields.map((field) => (
           <li key={field.id}>
-            {field.tableName}.{field.columnName}
+            {displayLabel(field)}
             {field.dtype === 'numeric' && (
               <label>
                 Agrégation
                 <select
-                  aria-label={`Agrégation pour ${field.tableName}.${field.columnName}`}
+                  aria-label={`Agrégation pour ${displayLabel(field)}`}
                   value={field.aggregation ?? ''}
                   onChange={(e) => onAggregationChange(field.id, e.target.value ? (e.target.value as Aggregation) : undefined)}
                 >
@@ -48,7 +48,7 @@ export function ShelfDropZone({
                 </select>
               </label>
             )}
-            <button type="button" aria-label={`Retirer ${field.tableName}.${field.columnName} de ${label}`} onClick={() => onRemove(field.id)}>
+            <button type="button" aria-label={`Retirer ${displayLabel(field)} de ${label}`} onClick={() => onRemove(field.id)}>
               ×
             </button>
           </li>

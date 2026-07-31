@@ -29,7 +29,7 @@ export type ColumnType = 'text' | 'date' | 'numeric' | 'boolean';
 
 export interface TableSchema {
   tableName: string;
-  columns: { columnName: string; dtype: ColumnType }[];
+  columns: { columnName: string; dtype: ColumnType; label: string | null }[];
 }
 
 export type ChartType = 'bar' | 'line' | 'scatter' | 'heatmap' | 'table' | 'geo';
@@ -50,6 +50,12 @@ export interface ShelfDefinition {
   color: FieldRef[];
   size: FieldRef[];
   filters: FieldRef[];
+}
+
+export interface ViewData {
+  headers: string[];
+  headerLabels: string[];
+  rows: Record<string, unknown>[];
 }
 
 export interface SavedView {

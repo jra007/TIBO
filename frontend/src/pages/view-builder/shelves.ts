@@ -16,8 +16,14 @@ export interface Field {
   tableName: string;
   columnName: string;
   dtype: ColumnType;
+  /** Cosmetic display name, editable per column — falls back to columnName when unset. */
+  label: string | null;
   /** Only meaningful when dtype === 'numeric' — set automatically (default "sum") once the field is placed on a shelf. */
   aggregation?: Aggregation;
+}
+
+export function displayLabel(field: Pick<Field, 'columnName' | 'label'>): string {
+  return field.label ?? field.columnName;
 }
 
 export type ShelfAssignment = Record<ShelfId, Field[]>;

@@ -15,6 +15,7 @@ function schemasToFields(schemas: TableSchema[]): Field[] {
       tableName: table.tableName,
       columnName: column.columnName,
       dtype: column.dtype,
+      label: column.label,
     })),
   );
 }
@@ -26,6 +27,7 @@ function fieldRefToField(ref: { tableName: string; columnName: string; aggregati
     tableName: ref.tableName,
     columnName: ref.columnName,
     dtype: match?.dtype ?? 'text',
+    label: match?.label ?? null,
     aggregation: ref.aggregation,
   };
 }
@@ -94,6 +96,22 @@ export function ViewBuilderPage() {
     }));
   }
 
+  async function handleRename(field: Field, newLabel: string) {
+    try {
+      await apiClient.put(`/ingestion/tables/${field.tableName}/columns/${field.columnName}/label`, { label: newLabel });
+      setAvailableFields((prev) => prev.map((f) => (f.id === field.id ? { ...f, label: newLabel } : f)));
+      setShelves((prev) => {
+        const updated = { ...prev };
+        for (const shelfId of Object.keys(updated) as ShelfId[]) {
+          updated[shelfId] = updated[shelfId].map((f) => (f.id === field.id ? { ...f, label: newLabel } : f));
+        }
+        return updated;
+      });
+    } catch {
+      setError('Échec du renommage du champ.');
+    }
+  }
+
   function handleDragEnd(event: DragEndEvent) {
     const field = event.active.data.current?.field as Field | undefined;
     const shelfId = event.over?.id as ShelfId | undefined;
@@ -158,7 +176,7 @@ export function ViewBuilderPage() {
           <aside aria-label="Champs disponibles">
             <h2>Champs</h2>
             {availableFields.filter((f) => !assignedFieldIds.has(f.id)).map((field) => (
-              <FieldChip key={field.id} field={fieldById[field.id]} onAddToShelf={(shelfId) => assignToShelf(field, shelfId)} />
+              <FieldChip key={field.id} field={fieldById[field.id]} onAddToShelf={(shelfId) => assignToShelf(field, shelfId)} onRename={handleRename} />
             ))}
           </aside>
           <div className="shelves">

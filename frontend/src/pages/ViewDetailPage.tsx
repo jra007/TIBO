@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
-import type { SavedView } from '../api/types';
+import type { SavedView, ViewData } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { StatusBadge, type StatusTone } from '../components/StatusBadge';
 import { ViewChart } from './view-builder/ViewChart';
@@ -23,14 +23,16 @@ export function ViewDetailPage() {
   const { session } = useAuth();
   const [view, setView] = useState<SavedView | null>(null);
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
+  const [headerLabels, setHeaderLabels] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
-    Promise.all([apiClient.get<SavedView>(`/views/${id}`), apiClient.get<{ headers: string[]; rows: Record<string, unknown>[] }>(`/views/${id}/data`)])
+    Promise.all([apiClient.get<SavedView>(`/views/${id}`), apiClient.get<ViewData>(`/views/${id}/data`)])
       .then(([viewResult, dataResult]) => {
         setView(viewResult);
         setRows(dataResult.rows);
+        setHeaderLabels(Object.fromEntries(dataResult.headers.map((header, i) => [header, dataResult.headerLabels[i]])));
       })
       .catch(() => setError('Impossible de charger cette vue.'));
   }, [id]);
@@ -61,7 +63,13 @@ export function ViewDetailPage() {
           <StatusBadge tone={RELATION_STATUS_TONES[view.relationStatus]}>{RELATION_STATUS_LABELS[view.relationStatus]}</StatusBadge>
         </output>
       )}
-      <ViewChart chartType={view.chartType} dimensionField={view.shelves.rows[0]} measureField={view.shelves.columns[0]} rows={rows} />
+      <ViewChart
+        chartType={view.chartType}
+        dimensionField={view.shelves.rows[0]}
+        measureField={view.shelves.columns[0]}
+        rows={rows}
+        headerLabels={headerLabels}
+      />
     </section>
   );
 }

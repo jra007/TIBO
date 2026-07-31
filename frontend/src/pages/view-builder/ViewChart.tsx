@@ -16,10 +16,16 @@ interface ViewChartProps {
   dimensionField?: Field;
   measureField?: Field;
   rows: Record<string, unknown>[];
+  /** "table.column" -> display label, from GET /views/:id/data's headers/headerLabels. */
+  headerLabels?: Record<string, string>;
 }
 
 function fieldKey(field: Field): string {
   return `${field.tableName}.${field.columnName}`;
+}
+
+function fieldLabel(field: Field, headerLabels: Record<string, string>): string {
+  return headerLabels[fieldKey(field)] ?? field.columnName;
 }
 
 function aggregateByDimension(rows: Record<string, unknown>[], dimensionKey: string, measureKey: string) {
@@ -32,7 +38,7 @@ function aggregateByDimension(rows: Record<string, unknown>[], dimensionKey: str
   return [...totals.entries()].map(([name, value]) => ({ name, value }));
 }
 
-function DataTable({ rows }: { rows: Record<string, unknown>[] }) {
+function DataTable({ rows, headerLabels }: { rows: Record<string, unknown>[]; headerLabels: Record<string, string> }) {
   if (rows.length === 0) return <p>Aucune donnée.</p>;
   const headers = Object.keys(rows[0]);
   return (
@@ -41,7 +47,7 @@ function DataTable({ rows }: { rows: Record<string, unknown>[] }) {
         <tr>
           {headers.map((header) => (
             <th key={header} scope="col">
-              {header}
+              {headerLabels[header] ?? header}
             </th>
           ))}
         </tr>
@@ -65,14 +71,14 @@ function DataTable({ rows }: { rows: Record<string, unknown>[] }) {
  * standard 1-dimension + 1-measure case, not a substitute for a real aggregation picker.
  * heatmap/geo have no dedicated visualization yet and fall back to a plain data table.
  */
-export function ViewChart({ chartType, dimensionField, measureField, rows }: ViewChartProps) {
-  if (chartType === 'table') return <DataTable rows={rows} />;
+export function ViewChart({ chartType, dimensionField, measureField, rows, headerLabels = {} }: ViewChartProps) {
+  if (chartType === 'table') return <DataTable rows={rows} headerLabels={headerLabels} />;
 
   if (chartType === 'heatmap' || chartType === 'geo' || !dimensionField || !measureField) {
     return (
       <>
         <p>Aperçu simplifié (tableau) — rendu graphique dédié pour ce type à venir.</p>
-        <DataTable rows={rows} />
+        <DataTable rows={rows} headerLabels={headerLabels} />
       </>
     );
   }
@@ -82,7 +88,7 @@ export function ViewChart({ chartType, dimensionField, measureField, rows }: Vie
   return (
     <>
       <p>
-        Agrégation par défaut : somme de « {measureField.columnName} » par « {dimensionField.columnName} ».
+        Agrégation par défaut : somme de « {fieldLabel(measureField, headerLabels)} » par « {fieldLabel(dimensionField, headerLabels)} ».
       </p>
       <ResponsiveContainer width="100%" height={300}>
         {chartType === 'bar' ? (

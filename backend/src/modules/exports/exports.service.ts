@@ -6,6 +6,11 @@ import { AuditService } from '../audit/audit.service';
 import { buildViewDataQuery } from '../views/view-query-builder';
 import { buildPrintableHtml, renderHtmlToPdf } from './render-pdf';
 
+/** Swaps each row's internal "table.column" keys for their display label, for human-facing exports. */
+function relabelRows(rows: Record<string, unknown>[], headers: string[], headerLabels: string[]): Record<string, unknown>[] {
+  return rows.map((row) => Object.fromEntries(headers.map((header, i) => [headerLabels[i], row[header]])));
+}
+
 @Injectable()
 export class ExportsService {
   constructor(
@@ -18,10 +23,10 @@ export class ExportsService {
     const view = await this.knex('views').where({ id: viewId }).first();
     if (!view) throw new NotFoundException(`View ${viewId} not found`);
 
-    const { headers, query, mapRow } = await buildViewDataQuery(this.knex, view.shelves, view.relation_ids);
-    const rows = (await query).map(mapRow);
+    const { headers, headerLabels, query, mapRow } = await buildViewDataQuery(this.knex, view.shelves, view.relation_ids);
+    const rows = relabelRows((await query).map(mapRow), headers, headerLabels);
 
-    const html = buildPrintableHtml(view.name, headers, rows);
+    const html = buildPrintableHtml(view.name, headerLabels, rows);
     const buffer = await renderHtmlToPdf(html);
 
     await this.auditService.record({ actorUserId, action: 'export.pdf', target: viewId });
@@ -36,10 +41,10 @@ export class ExportsService {
     const view = await this.knex('views').where({ id: viewId }).first();
     if (!view) throw new NotFoundException(`View ${viewId} not found`);
 
-    const { headers, query, mapRow } = await buildViewDataQuery(this.knex, view.shelves, view.relation_ids);
-    const rows = (await query).map(mapRow);
+    const { headers, headerLabels, query, mapRow } = await buildViewDataQuery(this.knex, view.shelves, view.relation_ids);
+    const rows = relabelRows((await query).map(mapRow), headers, headerLabels);
 
-    const worksheet = XLSX.utils.json_to_sheet(rows, { header: headers });
+    const worksheet = XLSX.utils.json_to_sheet(rows, { header: headerLabels });
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Data');
 

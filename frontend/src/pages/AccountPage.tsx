@@ -74,7 +74,7 @@ export function AccountPage() {
             {error}
           </p>
         )}
-        {success && <p role="status">Mot de passe mis à jour.</p>}
+        {success && <output>Mot de passe mis à jour.</output>}
         <button type="submit" disabled={submitting}>
           {submitting ? 'Enregistrement…' : 'Changer le mot de passe'}
         </button>

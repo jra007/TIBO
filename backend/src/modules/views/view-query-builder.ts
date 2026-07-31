@@ -1,4 +1,5 @@
 import type { Knex } from 'knex';
+import { getLabelsMap } from './column-labels';
 import type { Aggregation, ShelfDefinition } from './views.service';
 
 interface RelationRow {
@@ -47,7 +48,12 @@ export async function buildViewDataQuery(
   knex: Knex,
   shelves: ShelfDefinition,
   relationIds: string[],
-): Promise<{ headers: string[]; query: Knex.QueryBuilder; mapRow: (row: Record<string, unknown>) => Record<string, unknown> }> {
+): Promise<{
+  headers: string[];
+  headerLabels: string[];
+  query: Knex.QueryBuilder;
+  mapRow: (row: Record<string, unknown>) => Record<string, unknown>;
+}> {
   const fields = dedupeFields([...shelves.rows, ...shelves.columns, ...shelves.color, ...shelves.size]);
   if (fields.length === 0) throw new Error('Cette vue ne contient aucun champ à afficher');
 
@@ -78,6 +84,8 @@ export async function buildViewDataQuery(
   }
 
   const headers = fields.map((f) => `${f.tableName}.${f.columnName}`);
+  const labelsMap = await getLabelsMap(knex, fields);
+  const headerLabels = fields.map((f) => labelsMap.get(`${f.tableName}.${f.columnName}`) ?? f.columnName);
   const aliases = fields.map((_, i) => `col_${i}`);
   const dimensionFields = fields.filter((f) => !f.aggregation);
   const measureFields = fields.filter((f) => f.aggregation);
@@ -100,7 +108,7 @@ export async function buildViewDataQuery(
   const mapRow = (row: Record<string, unknown>): Record<string, unknown> =>
     Object.fromEntries(headers.map((header, i) => [header, row[aliases[i]]]));
 
-  return { headers, query, mapRow };
+  return { headers, headerLabels, query, mapRow };
 }
 
 function connectsToJoined(relation: RelationRow, joined: Set<string>, candidate: string): boolean {
