@@ -24,8 +24,8 @@ export class ExportsService {
     const view = await this.knex('views').where({ id: viewId }).first();
     if (!view) throw new NotFoundException(`View ${viewId} not found`);
 
-    const { headers, query } = await buildViewDataQuery(this.knex, view.shelves, view.relation_ids);
-    const rows = await query;
+    const { headers, query, mapRow } = await buildViewDataQuery(this.knex, view.shelves, view.relation_ids);
+    const rows = (await query).map(mapRow);
 
     const worksheet = XLSX.utils.json_to_sheet(rows, { header: headers });
     const workbook = XLSX.utils.book_new();

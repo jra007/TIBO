@@ -7,9 +7,13 @@ export type ChartType = 'bar' | 'line' | 'scatter' | 'heatmap' | 'table' | 'geo'
 export type ViewVisibility = 'private' | 'shared';
 export type ViewRelationStatus = 'validated' | 'pending' | 'to_fix';
 
+export type Aggregation = 'sum' | 'avg' | 'count' | 'min' | 'max';
+
 export interface FieldRef {
   tableName: string;
   columnName: string;
+  /** Set only for numeric fields used as a measure — matches spec 3.1.3's per-measure aggregation. Absent = dimension. */
+  aggregation?: Aggregation;
 }
 
 export interface ShelfDefinition {
@@ -97,9 +101,9 @@ export class ViewsService {
     const row: ViewRow | undefined = await this.knex('views').where({ id: viewId }).first();
     if (!row) throw new NotFoundException(`View ${viewId} not found`);
 
-    const { headers, query } = await buildViewDataQuery(this.knex, row.shelves, row.relation_ids);
+    const { headers, query, mapRow } = await buildViewDataQuery(this.knex, row.shelves, row.relation_ids);
     const rows = await query;
-    return { headers, rows };
+    return { headers, rows: rows.map(mapRow) };
   }
 
   /** Requires view:share in addition to view:create — kept as a distinct permission per spec. */

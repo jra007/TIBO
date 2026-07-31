@@ -36,9 +36,12 @@ export type ChartType = 'bar' | 'line' | 'scatter' | 'heatmap' | 'table' | 'geo'
 export type ViewVisibility = 'private' | 'shared';
 export type ViewRelationStatus = 'validated' | 'pending' | 'to_fix';
 
+export type Aggregation = 'sum' | 'avg' | 'count' | 'min' | 'max';
+
 export interface FieldRef {
   tableName: string;
   columnName: string;
+  aggregation?: Aggregation;
 }
 
 export interface ShelfDefinition {

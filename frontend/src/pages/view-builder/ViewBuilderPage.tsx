@@ -5,7 +5,7 @@ import { apiClient } from '../../api/client';
 import type { TableSchema } from '../../api/types';
 import { FieldChip } from './FieldChip';
 import { ShelfDropZone } from './ShelfDropZone';
-import { emptyShelfAssignment, SHELVES, type Field, type ShelfAssignment, type ShelfId } from './shelves';
+import { emptyShelfAssignment, SHELVES, type Aggregation, type Field, type ShelfAssignment, type ShelfId } from './shelves';
 import { suggestChartType, type ChartType } from './suggestChartType';
 
 function schemasToFields(schemas: TableSchema[]): Field[] {
@@ -14,6 +14,7 @@ function schemasToFields(schemas: TableSchema[]): Field[] {
       id: `${table.tableName}.${column.columnName}`,
       tableName: table.tableName,
       columnName: column.columnName,
+      dtype: column.dtype,
     })),
   );
 }
@@ -42,11 +43,21 @@ export function ViewBuilderPage() {
   const hasAnyField = Object.values(shelves).some((fields) => fields.length > 0);
 
   function assignToShelf(field: Field, shelfId: ShelfId) {
-    setShelves((prev) => ({ ...prev, [shelfId]: [...prev[shelfId], field] }));
+    // Numeric fields default to summed measures (spec 3.1.3's standard aggregations); switchable
+    // per-field once placed, including back to "no aggregation" for numeric fields used as dimensions.
+    const placedField = field.dtype === 'numeric' ? { ...field, aggregation: field.aggregation ?? ('sum' as Aggregation) } : field;
+    setShelves((prev) => ({ ...prev, [shelfId]: [...prev[shelfId], placedField] }));
   }
 
   function removeFromShelf(shelfId: ShelfId, fieldId: string) {
     setShelves((prev) => ({ ...prev, [shelfId]: prev[shelfId].filter((f) => f.id !== fieldId) }));
+  }
+
+  function updateAggregation(shelfId: ShelfId, fieldId: string, aggregation: Aggregation | undefined) {
+    setShelves((prev) => ({
+      ...prev,
+      [shelfId]: prev[shelfId].map((f) => (f.id === fieldId ? { ...f, aggregation } : f)),
+    }));
   }
 
   function handleDragEnd(event: DragEndEvent) {
@@ -59,7 +70,7 @@ export function ViewBuilderPage() {
     setSaving(true);
     setError(null);
     try {
-      const stripId = (fields: Field[]) => fields.map(({ tableName, columnName }) => ({ tableName, columnName }));
+      const stripId = (fields: Field[]) => fields.map(({ tableName, columnName, aggregation }) => ({ tableName, columnName, aggregation }));
       await apiClient.post('/views', {
         name,
         chartType: activeChartType,
@@ -105,6 +116,7 @@ export function ViewBuilderPage() {
                 label={shelf.label}
                 fields={shelves[shelf.id]}
                 onRemove={(fieldId) => removeFromShelf(shelf.id, fieldId)}
+                onAggregationChange={(fieldId, aggregation) => updateAggregation(shelf.id, fieldId, aggregation)}
               />
             ))}
           </div>

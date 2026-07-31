@@ -1,5 +1,5 @@
 import type { Knex } from 'knex';
-import type { ShelfDefinition } from './views.service';
+import type { Aggregation, ShelfDefinition } from './views.service';
 
 interface RelationRow {
   source_table: string;
@@ -7,6 +7,14 @@ interface RelationRow {
   target_table: string;
   target_column: string;
 }
+
+const SQL_AGGREGATE: Record<Aggregation, string> = {
+  sum: 'SUM',
+  avg: 'AVG',
+  count: 'COUNT',
+  min: 'MIN',
+  max: 'MAX',
+};
 
 function dedupeFields(fields: ShelfDefinition['rows']): ShelfDefinition['rows'] {
   const seen = new Set<string>();
@@ -22,17 +30,24 @@ function dedupeFields(fields: ShelfDefinition['rows']): ShelfDefinition['rows'] 
 }
 
 /**
- * Builds the query for "the underlying data of a view": a plain projection of the columns
- * placed in rows/columns/color/size, joined across tables via the relations pinned on the view
- * at creation time (ViewsService.pinRelationsForTablePairs). No aggregation yet — shelves don't
- * carry a per-field aggregation config, so this returns raw rows, not summed/averaged measures.
- * The `filters` shelf has no stored values/operators yet either, so it's excluded here too.
+ * Builds the query for "the underlying data of a view": the columns placed in
+ * rows/columns/color/size, joined across tables via the relations pinned on the view at creation
+ * time (ViewsService.pinRelationsForTablePairs). Fields with an `aggregation` set (numeric
+ * measures, per spec 3.1.3) are summed/averaged/etc. and GROUP BY the remaining (dimension)
+ * fields; if no field has an aggregation, this is a plain projection of raw rows — that's still
+ * the common case for a 'table' chart type. The `filters` shelf has no stored values/operators
+ * yet, so it's excluded here too.
+ *
+ * SQL aliases are synthetic (col_0, col_1, ...), not "table.column" strings: knex's identifier
+ * quoting (`??`) splits on '.' to address table.column pairs, so a "table.column"-shaped alias
+ * gets silently mis-quoted into two separate identifiers instead of one — a real bug caught by
+ * testing, not just a style choice. `mapRow` restores the "table.column" keys the callers expect.
  */
 export async function buildViewDataQuery(
   knex: Knex,
   shelves: ShelfDefinition,
   relationIds: string[],
-): Promise<{ headers: string[]; query: Knex.QueryBuilder }> {
+): Promise<{ headers: string[]; query: Knex.QueryBuilder; mapRow: (row: Record<string, unknown>) => Record<string, unknown> }> {
   const fields = dedupeFields([...shelves.rows, ...shelves.columns, ...shelves.color, ...shelves.size]);
   if (fields.length === 0) throw new Error('Cette vue ne contient aucun champ à afficher');
 
@@ -63,10 +78,29 @@ export async function buildViewDataQuery(
   }
 
   const headers = fields.map((f) => `${f.tableName}.${f.columnName}`);
-  const selectMap = Object.fromEntries(fields.map((f) => [`${f.tableName}.${f.columnName}`, `${f.tableName}.${f.columnName}`]));
-  query = query.select(selectMap);
+  const aliases = fields.map((_, i) => `col_${i}`);
+  const dimensionFields = fields.filter((f) => !f.aggregation);
+  const measureFields = fields.filter((f) => f.aggregation);
 
-  return { headers, query };
+  if (measureFields.length === 0) {
+    const selectExpr = fields.map((f, i) => knex.raw('?? as ??', [`${f.tableName}.${f.columnName}`, aliases[i]]));
+    query = query.select(selectExpr);
+  } else {
+    const selectExpr = fields.map((f, i) =>
+      f.aggregation
+        ? knex.raw(`${SQL_AGGREGATE[f.aggregation]}(??) as ??`, [`${f.tableName}.${f.columnName}`, aliases[i]])
+        : knex.raw('?? as ??', [`${f.tableName}.${f.columnName}`, aliases[i]]),
+    );
+    query = query.select(selectExpr);
+    if (dimensionFields.length > 0) {
+      query = query.groupBy(dimensionFields.map((f) => `${f.tableName}.${f.columnName}`));
+    }
+  }
+
+  const mapRow = (row: Record<string, unknown>): Record<string, unknown> =>
+    Object.fromEntries(headers.map((header, i) => [header, row[aliases[i]]]));
+
+  return { headers, query, mapRow };
 }
 
 function connectsToJoined(relation: RelationRow, joined: Set<string>, candidate: string): boolean {
