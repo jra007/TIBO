@@ -1,16 +1,38 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import type { Knex } from 'knex';
+import * as XLSX from 'xlsx';
+import { KNEX_CONNECTION } from '../../database/database.constants';
+import { AuditService } from '../audit/audit.service';
+import { buildViewDataQuery } from './view-query-builder';
 
 @Injectable()
 export class ExportsService {
-  /** Renders HTML -> PDF (Puppeteer/Playwright). Result must be purged 1h after generation per retention policy. */
+  constructor(
+    @Inject(KNEX_CONNECTION) private readonly knex: Knex,
+    private readonly auditService: AuditService,
+  ) {}
+
   async exportToPdf(viewOrDashboardId: string): Promise<Buffer> {
     void viewOrDashboardId;
-    throw new Error('Not implemented');
+    throw new Error('Not implemented: needs a headless-browser rendering pipeline (Puppeteer/Playwright), not yet added');
   }
 
-  /** SheetJS-based export of underlying data, headers + types preserved. */
-  async exportToExcel(viewId: string): Promise<Buffer> {
-    void viewId;
-    throw new Error('Not implemented');
+  /** SheetJS-based export of underlying data, headers + types preserved. Streamed directly in the
+   * HTTP response, never written to disk — trivially satisfies the "never stored beyond 1h" retention
+   * rule for temporary exports (section 6bis) since nothing persists to begin with. */
+  async exportToExcel(viewId: string, actorUserId: string): Promise<Buffer> {
+    const view = await this.knex('views').where({ id: viewId }).first();
+    if (!view) throw new NotFoundException(`View ${viewId} not found`);
+
+    const { headers, query } = await buildViewDataQuery(this.knex, view.shelves, view.relation_ids);
+    const rows = await query;
+
+    const worksheet = XLSX.utils.json_to_sheet(rows, { header: headers });
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Data');
+
+    await this.auditService.record({ actorUserId, action: 'export.excel', target: viewId });
+
+    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
   }
 }

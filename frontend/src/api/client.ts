@@ -42,9 +42,25 @@ async function requestForm<T>(path: string, formData: FormData): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+async function downloadFile(path: string, filename: string): Promise<void> {
+  const response = await fetch(`${BASE_URL}${path}`, { method: 'POST', credentials: 'include', headers: authHeader() });
+  if (!response.ok) {
+    handleUnauthorized(response);
+    throw new Error(`Request failed: ${response.status} ${path}`);
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export const apiClient = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) => request<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
   put: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body: body ? JSON.stringify(body) : undefined }),
   postForm: <T>(path: string, formData: FormData) => requestForm<T>(path, formData),
+  download: downloadFile,
 };

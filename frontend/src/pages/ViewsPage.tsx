@@ -11,6 +11,8 @@ const RELATION_STATUS_LABELS: Record<SavedView['relationStatus'], string> = {
 
 function ViewRow({ view, onShared }: { view: SavedView; onShared: () => void }) {
   const [sharing, setSharing] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleShare() {
     const groupId = window.prompt('Partager avec quel groupe ?');
@@ -21,6 +23,18 @@ function ViewRow({ view, onShared }: { view: SavedView; onShared: () => void }) 
       onShared();
     } finally {
       setSharing(false);
+    }
+  }
+
+  async function handleExportExcel() {
+    setExporting(true);
+    setError(null);
+    try {
+      await apiClient.download(`/exports/excel/${view.id}`, `${view.name}.xlsx`);
+    } catch {
+      setError("Échec de l'export.");
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -35,6 +49,14 @@ function ViewRow({ view, onShared }: { view: SavedView; onShared: () => void }) 
           <button type="button" onClick={handleShare} disabled={sharing}>
             Partager
           </button>
+        )}
+        <button type="button" onClick={handleExportExcel} disabled={exporting}>
+          Exporter en Excel
+        </button>
+        {error && (
+          <span role="alert" className="error">
+            {error}
+          </span>
         )}
       </td>
     </tr>
