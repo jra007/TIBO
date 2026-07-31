@@ -2,16 +2,16 @@ services:
   postgres:
     image: postgres:16
     environment:
-      POSTGRES_USER: tibo
-      POSTGRES_PASSWORD: tibo_dev_password
-      POSTGRES_DB: tibo
+      POSTGRES_USER: ${POSTGRES_USER:-tibo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tibo_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-tibo}
     ports:
-      - "5434:5432"
+      - "${POSTGRES_PORT:-5434}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U tibo"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tibo}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -19,21 +19,22 @@ services:
   relation-detection:
     build: ./relation-detection
     ports:
-      - "8001:8000"
+      - "${RELATION_DETECTION_PORT:-8001}:8000"
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile.dev
     environment:
-      DATABASE_URL: postgres://tibo:tibo_dev_password@postgres:5432/tibo
+      DATABASE_URL: postgres://${POSTGRES_USER:-tibo}:${POSTGRES_PASSWORD:-tibo_dev_password}@postgres:5432/${POSTGRES_DB:-tibo}
       RELATION_DETECTION_URL: http://relation-detection:8000
-      # Dev-only values. JWT_SECRET must be a real secret (vault-managed) before any non-local
+      # Dev-only fallbacks. JWT_SECRET must be a real generated secret before any non-local
       # deployment; TIBO_ADMIN_PASSWORD sets the bootstrap admin's password on first run only.
-      JWT_SECRET: dev-insecure-secret-change-me
-      TIBO_ADMIN_PASSWORD: changeme123
+      # Set both via .env — see .env.example.
+      JWT_SECRET: ${JWT_SECRET:-dev-insecure-secret-change-me}
+      TIBO_ADMIN_PASSWORD: ${TIBO_ADMIN_PASSWORD:-changeme123}
     ports:
-      - "3000:3000"
+      - "${BACKEND_PORT:-3000}:3000"
     volumes:
       - ./backend:/app
       - backend_node_modules:/app/node_modules
@@ -48,9 +49,9 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.dev
     environment:
-      VITE_API_BASE_URL: https://apps.jralab.ch/api
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:3000}
     ports:
-      - "5174:5173"
+      - "${FRONTEND_PORT:-5174}:5173"
     volumes:
       - ./frontend:/app
       - frontend_node_modules:/app/node_modules
