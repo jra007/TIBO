@@ -28,6 +28,10 @@ services:
     environment:
       DATABASE_URL: postgres://tibo:tibo_dev_password@postgres:5432/tibo
       RELATION_DETECTION_URL: http://relation-detection:8000
+      # Dev-only values. JWT_SECRET must be a real secret (vault-managed) before any non-local
+      # deployment; TIBO_ADMIN_PASSWORD sets the bootstrap admin's password on first run only.
+      JWT_SECRET: dev-insecure-secret-change-me
+      TIBO_ADMIN_PASSWORD: changeme123
     ports:
       - "3000:3000"
     volumes:

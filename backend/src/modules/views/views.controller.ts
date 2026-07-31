@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import type { AuthenticatedRequest } from '../auth/authenticated-request';
 import { RequirePermission } from '../rbac/decorators/require-permission.decorator';
-import { CreateViewInput, ViewsService } from './views.service';
+import { ViewsService, type CreateViewInput } from './views.service';
 
 @Controller('views')
 export class ViewsController {
@@ -8,15 +9,14 @@ export class ViewsController {
 
   @Post()
   @RequirePermission('view:create')
-  create(@Body() body: CreateViewInput & { ownerId: string }) {
-    const { ownerId, ...input } = body;
-    return this.viewsService.create(ownerId, input);
+  create(@Req() req: AuthenticatedRequest, @Body() input: CreateViewInput) {
+    return this.viewsService.create(req.user.id, input);
   }
 
   @Get('mine')
   @RequirePermission('view:read')
-  listMine(@Query('ownerId') ownerId: string) {
-    return this.viewsService.listMine(ownerId);
+  listMine(@Req() req: AuthenticatedRequest) {
+    return this.viewsService.listMine(req.user.id);
   }
 
   @Get('team/:groupId')

@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import type { AuthenticatedRequest } from '../auth/authenticated-request';
 import { RequirePermission } from '../rbac/decorators/require-permission.decorator';
 import { DashboardsService } from './dashboards.service';
 
@@ -8,14 +9,14 @@ export class DashboardsController {
 
   @Post()
   @RequirePermission('view:create')
-  create(@Body() body: { ownerId: string; name: string; viewIds: string[]; layout?: unknown }) {
-    return this.dashboardsService.create(body.ownerId, body.name, body.viewIds, body.layout);
+  create(@Req() req: AuthenticatedRequest, @Body() body: { name: string; viewIds: string[]; layout?: unknown }) {
+    return this.dashboardsService.create(req.user.id, body.name, body.viewIds, body.layout);
   }
 
   @Get('mine')
   @RequirePermission('view:read')
-  listMine(@Query('ownerId') ownerId: string) {
-    return this.dashboardsService.listMine(ownerId);
+  listMine(@Req() req: AuthenticatedRequest) {
+    return this.dashboardsService.listMine(req.user.id);
   }
 
   @Get('team/:groupId')

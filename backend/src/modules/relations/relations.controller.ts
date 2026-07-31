@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
+import type { AuthenticatedRequest } from '../auth/authenticated-request';
 import { RequirePermission } from '../rbac/decorators/require-permission.decorator';
 import { RelationsService, type RelationStatus } from './relations.service';
 
@@ -20,13 +21,13 @@ export class RelationsController {
 
   @Post(':id/validate')
   @RequirePermission('relation:validate')
-  validate(@Param('id') id: string, @Body('adminUserId') adminUserId: string) {
-    return this.relationsService.validate(id, adminUserId);
+  validate(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.relationsService.validate(id, req.user.id);
   }
 
   @Post(':id/reject')
   @RequirePermission('relation:validate')
-  reject(@Param('id') id: string, @Body('adminUserId') adminUserId: string) {
-    return this.relationsService.reject(id, adminUserId);
+  reject(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.relationsService.reject(id, req.user.id);
   }
 }
