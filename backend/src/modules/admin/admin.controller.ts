@@ -4,7 +4,7 @@ import { RequirePermission } from '../rbac/decorators/require-permission.decorat
 import type { Permission } from '../rbac/permissions';
 import { AuthSettingsService } from './settings/auth-settings.service';
 import { GroupsService } from './settings/groups.service';
-import { RetentionSettingsService } from './settings/retention-settings.service';
+import { RetentionSettingsService, type RetentionPolicy } from './settings/retention-settings.service';
 import { RolesService } from './settings/roles.service';
 import { SmtpSettingsService } from './settings/smtp-settings.service';
 import { UsersService } from './settings/users.service';
@@ -21,10 +21,20 @@ export class AdminController {
     private readonly usersService: UsersService,
   ) {}
 
+  @Get('retention')
+  @RequirePermission('settings:retention:edit')
+  listRetention() {
+    return this.retentionSettings.list();
+  }
+
   @Put('retention/:dataType')
   @RequirePermission('settings:retention:edit')
-  updateRetention(@Param('dataType') dataType: string, @Body() body: { duration: number; unit: string }, @Req() req: AuthenticatedRequest) {
-    return this.retentionSettings.update(dataType, body as never, req.user.id);
+  updateRetention(
+    @Param('dataType') dataType: string,
+    @Body() body: { duration: number; unit: RetentionPolicy['unit']; status: RetentionPolicy['status'] },
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.retentionSettings.update(dataType, body, req.user.id);
   }
 
   @Get('auth')
