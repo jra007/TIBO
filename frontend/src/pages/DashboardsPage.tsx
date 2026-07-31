@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from '../api/client';
-import type { Dashboard, SavedView } from '../api/types';
+import type { Dashboard, Group, SavedView } from '../api/types';
 
-function DashboardRow({ dashboard, onShared }: { dashboard: Dashboard; onShared: () => void }) {
+function DashboardRow({ dashboard, groups, onShared }: { dashboard: Dashboard; groups: Group[]; onShared: () => void }) {
+  const [shareGroupId, setShareGroupId] = useState('');
   const [sharing, setSharing] = useState(false);
 
+  const sharedGroupName = groups.find((g) => g.id === dashboard.sharedWithGroupId)?.name ?? dashboard.sharedWithGroupId;
+
   async function handleShare() {
-    const groupId = window.prompt('Partager avec quel groupe ?');
-    if (!groupId) return;
+    if (!shareGroupId) return;
     setSharing(true);
     try {
-      await apiClient.post(`/dashboards/${dashboard.id}/share`, { groupId });
+      await apiClient.post(`/dashboards/${dashboard.id}/share`, { groupId: shareGroupId });
       onShared();
     } finally {
       setSharing(false);
@@ -21,12 +23,25 @@ function DashboardRow({ dashboard, onShared }: { dashboard: Dashboard; onShared:
     <tr>
       <td>{dashboard.name}</td>
       <td>{dashboard.viewIds.length}</td>
-      <td>{dashboard.visibility === 'private' ? 'Privé' : `Partagé (${dashboard.sharedWithGroupId})`}</td>
+      <td>{dashboard.visibility === 'private' ? 'Privé' : `Partagé (${sharedGroupName})`}</td>
       <td>
         {dashboard.visibility === 'private' && (
-          <button type="button" onClick={handleShare} disabled={sharing}>
-            Partager
-          </button>
+          <>
+            <label htmlFor={`share-group-${dashboard.id}`} className="visually-hidden">
+              Partager {dashboard.name} avec un groupe
+            </label>
+            <select id={`share-group-${dashboard.id}`} value={shareGroupId} onChange={(e) => setShareGroupId(e.target.value)}>
+              <option value="">Choisir un groupe…</option>
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
+            <button type="button" onClick={handleShare} disabled={sharing || !shareGroupId}>
+              Partager
+            </button>
+          </>
         )}
       </td>
     </tr>
@@ -36,9 +51,10 @@ function DashboardRow({ dashboard, onShared }: { dashboard: Dashboard; onShared:
 export function DashboardsPage() {
   const [myDashboards, setMyDashboards] = useState<Dashboard[]>([]);
   const [myViews, setMyViews] = useState<SavedView[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
   const [name, setName] = useState('');
   const [selectedViewIds, setSelectedViewIds] = useState<string[]>([]);
-  const [groupId, setGroupId] = useState('');
+  const [teamGroupId, setTeamGroupId] = useState('');
   const [teamDashboards, setTeamDashboards] = useState<Dashboard[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +73,7 @@ export function DashboardsPage() {
 
   useEffect(() => {
     refresh();
+    apiClient.get<Group[]>('/groups').then(setGroups);
   }, []);
 
   function toggleView(viewId: string) {
@@ -72,8 +89,8 @@ export function DashboardsPage() {
   }
 
   async function loadTeamWorkspace() {
-    if (!groupId) return;
-    setTeamDashboards(await apiClient.get<Dashboard[]>(`/dashboards/team/${encodeURIComponent(groupId)}`));
+    if (!teamGroupId) return;
+    setTeamDashboards(await apiClient.get<Dashboard[]>(`/dashboards/team/${encodeURIComponent(teamGroupId)}`));
   }
 
   return (
@@ -116,15 +133,22 @@ export function DashboardsPage() {
         </thead>
         <tbody>
           {myDashboards.map((dashboard) => (
-            <DashboardRow key={dashboard.id} dashboard={dashboard} onShared={refresh} />
+            <DashboardRow key={dashboard.id} dashboard={dashboard} groups={groups} onShared={refresh} />
           ))}
         </tbody>
       </table>
 
       <h2>Espace d'équipe</h2>
-      <label htmlFor="team-group-id">Identifiant du groupe</label>
-      <input id="team-group-id" value={groupId} onChange={(e) => setGroupId(e.target.value)} />
-      <button type="button" onClick={loadTeamWorkspace}>
+      <label htmlFor="team-group-id">Groupe</label>
+      <select id="team-group-id" value={teamGroupId} onChange={(e) => setTeamGroupId(e.target.value)}>
+        <option value="">Choisir un groupe…</option>
+        {groups.map((group) => (
+          <option key={group.id} value={group.id}>
+            {group.name}
+          </option>
+        ))}
+      </select>
+      <button type="button" onClick={loadTeamWorkspace} disabled={!teamGroupId}>
         Afficher
       </button>
 

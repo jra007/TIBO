@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
-import type { SavedView } from '../api/types';
+import type { Group, SavedView } from '../api/types';
 import { StatusBadge, type StatusTone } from '../components/StatusBadge';
 
 const RELATION_STATUS_LABELS: Record<SavedView['relationStatus'], string> = {
@@ -20,17 +20,19 @@ function RelationStatusBadge({ status }: { status: SavedView['relationStatus'] }
   return <StatusBadge tone={RELATION_STATUS_TONES[status]}>{RELATION_STATUS_LABELS[status]}</StatusBadge>;
 }
 
-function ViewRow({ view, onShared }: { view: SavedView; onShared: () => void }) {
+function ViewRow({ view, groups, onShared }: { view: SavedView; groups: Group[]; onShared: () => void }) {
+  const [shareGroupId, setShareGroupId] = useState('');
   const [sharing, setSharing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const sharedGroupName = groups.find((g) => g.id === view.sharedWithGroupId)?.name ?? view.sharedWithGroupId;
+
   async function handleShare() {
-    const groupId = window.prompt('Partager avec quel groupe ?');
-    if (!groupId) return;
+    if (!shareGroupId) return;
     setSharing(true);
     try {
-      await apiClient.post(`/views/${view.id}/share`, { groupId });
+      await apiClient.post(`/views/${view.id}/share`, { groupId: shareGroupId });
       onShared();
     } finally {
       setSharing(false);
@@ -67,16 +69,31 @@ function ViewRow({ view, onShared }: { view: SavedView; onShared: () => void }) 
         <Link to={`/views/${view.id}`}>{view.name}</Link>
       </td>
       <td>{view.chartType}</td>
-      <td>{view.visibility === 'private' ? 'Privée' : `Partagée (${view.sharedWithGroupId})`}</td>
-      <td><RelationStatusBadge status={view.relationStatus} /></td>
+      <td>{view.visibility === 'private' ? 'Privée' : `Partagée (${sharedGroupName})`}</td>
+      <td>
+        <RelationStatusBadge status={view.relationStatus} />
+      </td>
       <td>
         <Link to={`/views/${view.id}/edit`} className="button">
           Modifier
         </Link>
         {view.visibility === 'private' && (
-          <button type="button" onClick={handleShare} disabled={sharing}>
-            Partager
-          </button>
+          <>
+            <label htmlFor={`share-group-${view.id}`} className="visually-hidden">
+              Partager {view.name} avec un groupe
+            </label>
+            <select id={`share-group-${view.id}`} value={shareGroupId} onChange={(e) => setShareGroupId(e.target.value)}>
+              <option value="">Choisir un groupe…</option>
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
+            <button type="button" onClick={handleShare} disabled={sharing || !shareGroupId}>
+              Partager
+            </button>
+          </>
         )}
         <button type="button" onClick={handleExportExcel} disabled={exporting}>
           Exporter en Excel
@@ -96,7 +113,8 @@ function ViewRow({ view, onShared }: { view: SavedView; onShared: () => void }) 
 
 export function ViewsPage() {
   const [myViews, setMyViews] = useState<SavedView[]>([]);
-  const [groupId, setGroupId] = useState('');
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [teamGroupId, setTeamGroupId] = useState('');
   const [teamViews, setTeamViews] = useState<SavedView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -110,11 +128,12 @@ export function ViewsPage() {
 
   useEffect(() => {
     refreshMine();
+    apiClient.get<Group[]>('/groups').then(setGroups);
   }, []);
 
   async function loadTeamWorkspace() {
-    if (!groupId) return;
-    setTeamViews(await apiClient.get<SavedView[]>(`/views/team/${encodeURIComponent(groupId)}`));
+    if (!teamGroupId) return;
+    setTeamViews(await apiClient.get<SavedView[]>(`/views/team/${encodeURIComponent(teamGroupId)}`));
   }
 
   return (
@@ -145,15 +164,22 @@ export function ViewsPage() {
         </thead>
         <tbody>
           {myViews.map((view) => (
-            <ViewRow key={view.id} view={view} onShared={refreshMine} />
+            <ViewRow key={view.id} view={view} groups={groups} onShared={refreshMine} />
           ))}
         </tbody>
       </table>
 
       <h2>Espace d'équipe</h2>
-      <label htmlFor="team-group-id">Identifiant du groupe</label>
-      <input id="team-group-id" value={groupId} onChange={(e) => setGroupId(e.target.value)} />
-      <button type="button" onClick={loadTeamWorkspace}>
+      <label htmlFor="team-group-id">Groupe</label>
+      <select id="team-group-id" value={teamGroupId} onChange={(e) => setTeamGroupId(e.target.value)}>
+        <option value="">Choisir un groupe…</option>
+        {groups.map((group) => (
+          <option key={group.id} value={group.id}>
+            {group.name}
+          </option>
+        ))}
+      </select>
+      <button type="button" onClick={loadTeamWorkspace} disabled={!teamGroupId}>
         Afficher
       </button>
 
@@ -172,7 +198,9 @@ export function ViewsPage() {
               <tr key={view.id}>
                 <td>{view.name}</td>
                 <td>{view.chartType}</td>
-                <td><RelationStatusBadge status={view.relationStatus} /></td>
+                <td>
+                  <RelationStatusBadge status={view.relationStatus} />
+                </td>
               </tr>
             ))}
           </tbody>

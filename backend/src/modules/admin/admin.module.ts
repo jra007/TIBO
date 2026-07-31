@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AdminController } from './admin.controller';
+import { GroupsLookupController } from './groups-lookup.controller';
 import { AuthSettingsService } from './settings/auth-settings.service';
 import { GroupsService } from './settings/groups.service';
 import { RetentionSettingsService } from './settings/retention-settings.service';
@@ -8,7 +9,7 @@ import { SmtpSettingsService } from './settings/smtp-settings.service';
 import { UsersService } from './settings/users.service';
 
 @Module({
-  controllers: [AdminController],
+  controllers: [AdminController, GroupsLookupController],
   providers: [RetentionSettingsService, AuthSettingsService, SmtpSettingsService, GroupsService, RolesService, UsersService],
   exports: [RetentionSettingsService, AuthSettingsService, SmtpSettingsService, GroupsService, RolesService, UsersService],
 })
