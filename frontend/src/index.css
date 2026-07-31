@@ -569,11 +569,15 @@ tbody tr:hover {
 
 .save-view {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 12px;
-  margin-top: 20px;
 }
 
-.save-view label {
-  margin-top: 0;
+.save-view input {
+  margin: 0;
+  width: auto;
+}
+
+.save-view button {
+  margin: 0;
 }

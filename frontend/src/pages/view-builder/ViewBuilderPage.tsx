@@ -134,7 +134,18 @@ export function ViewBuilderPage() {
 
   return (
     <section>
-      <h1>{isEditing ? 'Modifier la vue' : 'Constructeur de vues'}</h1>
+      <div className="page-header">
+        <h1>{isEditing ? 'Modifier la vue' : 'Constructeur de vues'}</h1>
+        <div className="save-view">
+          <label htmlFor="view-name" className="visually-hidden">
+            Nom de la vue
+          </label>
+          <input id="view-name" placeholder="Nom de la vue" value={name} onChange={(e) => setName(e.target.value)} />
+          <button type="button" onClick={handleSave} disabled={saving || !name || !hasAnyField}>
+            {saving ? 'Enregistrement…' : 'Enregistrer'}
+          </button>
+        </div>
+      </div>
 
       {error && (
         <p role="alert" className="error">
@@ -178,14 +189,6 @@ export function ViewBuilderPage() {
           </div>
         </div>
       </DndContext>
-
-      <div className="save-view">
-        <label htmlFor="view-name">Nom de la vue</label>
-        <input id="view-name" value={name} onChange={(e) => setName(e.target.value)} />
-        <button type="button" onClick={handleSave} disabled={saving || !name || !hasAnyField}>
-          {saving ? 'Enregistrement…' : 'Enregistrer'}
-        </button>
-      </div>
     </section>
   );
 }
