@@ -3,7 +3,7 @@ import { apiClient } from '../api/client';
 import type { Dashboard, Group, SavedView } from '../api/types';
 
 function DashboardRow({ dashboard, groups, onShared }: { dashboard: Dashboard; groups: Group[]; onShared: () => void }) {
-  const [shareGroupId, setShareGroupId] = useState('');
+  const [shareGroupId, setShareGroupId] = useState(dashboard.sharedWithGroupId ?? '');
   const [sharing, setSharing] = useState(false);
 
   const sharedGroupName = groups.find((g) => g.id === dashboard.sharedWithGroupId)?.name ?? dashboard.sharedWithGroupId;
@@ -19,29 +19,41 @@ function DashboardRow({ dashboard, groups, onShared }: { dashboard: Dashboard; g
     }
   }
 
+  async function handleUnshare() {
+    setSharing(true);
+    try {
+      await apiClient.post(`/dashboards/${dashboard.id}/unshare`);
+      setShareGroupId('');
+      onShared();
+    } finally {
+      setSharing(false);
+    }
+  }
+
   return (
     <tr>
       <td>{dashboard.name}</td>
       <td>{dashboard.viewIds.length}</td>
       <td>{dashboard.visibility === 'private' ? 'Privé' : `Partagé (${sharedGroupName})`}</td>
       <td>
-        {dashboard.visibility === 'private' && (
-          <>
-            <label htmlFor={`share-group-${dashboard.id}`} className="visually-hidden">
-              Partager {dashboard.name} avec un groupe
-            </label>
-            <select id={`share-group-${dashboard.id}`} value={shareGroupId} onChange={(e) => setShareGroupId(e.target.value)}>
-              <option value="">Choisir un groupe…</option>
-              {groups.map((group) => (
-                <option key={group.id} value={group.id}>
-                  {group.name}
-                </option>
-              ))}
-            </select>
-            <button type="button" onClick={handleShare} disabled={sharing || !shareGroupId}>
-              Partager
-            </button>
-          </>
+        <label htmlFor={`share-group-${dashboard.id}`} className="visually-hidden">
+          Partager {dashboard.name} avec un groupe
+        </label>
+        <select id={`share-group-${dashboard.id}`} value={shareGroupId} onChange={(e) => setShareGroupId(e.target.value)}>
+          <option value="">Choisir un groupe…</option>
+          {groups.map((group) => (
+            <option key={group.id} value={group.id}>
+              {group.name}
+            </option>
+          ))}
+        </select>
+        <button type="button" onClick={handleShare} disabled={sharing || !shareGroupId || shareGroupId === dashboard.sharedWithGroupId}>
+          {dashboard.visibility === 'shared' ? 'Changer le partage' : 'Partager'}
+        </button>
+        {dashboard.visibility === 'shared' && (
+          <button type="button" onClick={handleUnshare} disabled={sharing}>
+            Ne plus partager
+          </button>
         )}
       </td>
     </tr>

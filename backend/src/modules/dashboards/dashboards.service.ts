@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../../database/database.constants';
 import type { ViewVisibility } from '../views/views.service';
@@ -77,13 +77,30 @@ export class DashboardsService {
     return rows.map(toDomain);
   }
 
-  /** Same visibility/sharing rules as views.service — requires view:share per spec section 3.1.3. */
-  async shareWithGroup(dashboardId: string, groupId: string): Promise<Dashboard> {
+  /** Same visibility/sharing rules as views.service — requires view:share per spec section 3.1.3.
+   * Also re-shareable to a different group at any time, and reversible via unshare(). */
+  async shareWithGroup(dashboardId: string, ownerId: string, groupId: string): Promise<Dashboard> {
+    const existing: DashboardRow | undefined = await this.knex('dashboards').where({ id: dashboardId }).first();
+    if (!existing) throw new NotFoundException(`Dashboard ${dashboardId} not found`);
+    if (existing.owner_id !== ownerId) throw new ForbiddenException("Vous n'êtes pas propriétaire de ce tableau de bord");
+
     const [row]: DashboardRow[] = await this.knex('dashboards')
       .where({ id: dashboardId })
       .update({ visibility: 'shared', shared_with_group_id: groupId, updated_at: new Date() })
       .returning('*');
-    if (!row) throw new NotFoundException(`Dashboard ${dashboardId} not found`);
+    return toDomain(row);
+  }
+
+  /** Reverts a shared dashboard back to private. */
+  async unshare(dashboardId: string, ownerId: string): Promise<Dashboard> {
+    const existing: DashboardRow | undefined = await this.knex('dashboards').where({ id: dashboardId }).first();
+    if (!existing) throw new NotFoundException(`Dashboard ${dashboardId} not found`);
+    if (existing.owner_id !== ownerId) throw new ForbiddenException("Vous n'êtes pas propriétaire de ce tableau de bord");
+
+    const [row]: DashboardRow[] = await this.knex('dashboards')
+      .where({ id: dashboardId })
+      .update({ visibility: 'private', shared_with_group_id: null, updated_at: new Date() })
+      .returning('*');
     return toDomain(row);
   }
 }

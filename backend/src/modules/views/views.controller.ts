@@ -45,7 +45,13 @@ export class ViewsController {
 
   @Post(':id/share')
   @RequirePermission('view:share')
-  share(@Param('id') id: string, @Body('groupId') groupId: string) {
-    return this.viewsService.shareWithGroup(id, groupId);
+  share(@Param('id') id: string, @Req() req: AuthenticatedRequest, @Body('groupId') groupId: string) {
+    return this.viewsService.shareWithGroup(id, req.user.id, groupId);
+  }
+
+  @Post(':id/unshare')
+  @RequirePermission('view:share')
+  unshare(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.viewsService.unshare(id, req.user.id);
   }
 }

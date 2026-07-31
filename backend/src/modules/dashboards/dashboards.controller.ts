@@ -33,7 +33,13 @@ export class DashboardsController {
 
   @Post(':id/share')
   @RequirePermission('view:share')
-  share(@Param('id') id: string, @Body('groupId') groupId: string) {
-    return this.dashboardsService.shareWithGroup(id, groupId);
+  share(@Param('id') id: string, @Req() req: AuthenticatedRequest, @Body('groupId') groupId: string) {
+    return this.dashboardsService.shareWithGroup(id, req.user.id, groupId);
+  }
+
+  @Post(':id/unshare')
+  @RequirePermission('view:share')
+  unshare(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.dashboardsService.unshare(id, req.user.id);
   }
 }

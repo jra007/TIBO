@@ -129,13 +129,30 @@ export class ViewsService {
     return { headers, headerLabels, rows: rows.map(mapRow) };
   }
 
-  /** Requires view:share in addition to view:create — kept as a distinct permission per spec. */
-  async shareWithGroup(viewId: string, groupId: string): Promise<SavedView> {
+  /** Requires view:share in addition to view:create — kept as a distinct permission per spec.
+   * Also re-shareable to a different group at any time, and reversible via unshare(). */
+  async shareWithGroup(viewId: string, ownerId: string, groupId: string): Promise<SavedView> {
+    const existing: ViewRow | undefined = await this.knex('views').where({ id: viewId }).first();
+    if (!existing) throw new NotFoundException(`View ${viewId} not found`);
+    if (existing.owner_id !== ownerId) throw new ForbiddenException("Vous n'êtes pas propriétaire de cette vue");
+
     const [row]: ViewRow[] = await this.knex('views')
       .where({ id: viewId })
       .update({ visibility: 'shared', shared_with_group_id: groupId, updated_at: new Date() })
       .returning('*');
-    if (!row) throw new NotFoundException(`View ${viewId} not found`);
+    return this.toDomain(row);
+  }
+
+  /** Reverts a shared view back to private. */
+  async unshare(viewId: string, ownerId: string): Promise<SavedView> {
+    const existing: ViewRow | undefined = await this.knex('views').where({ id: viewId }).first();
+    if (!existing) throw new NotFoundException(`View ${viewId} not found`);
+    if (existing.owner_id !== ownerId) throw new ForbiddenException("Vous n'êtes pas propriétaire de cette vue");
+
+    const [row]: ViewRow[] = await this.knex('views')
+      .where({ id: viewId })
+      .update({ visibility: 'private', shared_with_group_id: null, updated_at: new Date() })
+      .returning('*');
     return this.toDomain(row);
   }
 
