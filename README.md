@@ -12,6 +12,17 @@ infra/postgres/        Scripts d'initialisation Postgres (pgcrypto)
 docker-compose.yml      Environnement de dev local (Postgres + les 3 services ci-dessus)
 ```
 
+## Configuration
+
+Toute la configuration (mots de passe, secret JWT, ports, URL publique du frontend) vit dans un
+fichier `.env` à la racine, non suivi par git — copier `.env.example` vers `.env` et ajuster :
+
+```
+cp .env.example .env
+```
+
+Sans `.env`, `docker-compose.yml` retombe sur des valeurs par défaut de dev uniquement.
+
 ## Démarrer en local
 
 ```
@@ -41,7 +52,7 @@ origin. Configuration testée avec NPM (Nginx Proxy Manager), transposable à to
    ```
    Indispensable : le backend ne connaît pas le préfixe `/api` dans ses routes (`/auth/login`,
    `/views`, etc.), il faut le retirer avant de transmettre la requête.
-3. Mettre à jour `VITE_API_BASE_URL` dans `docker-compose.yml` avec l'URL complète, `/api` inclus
+3. Mettre à jour `VITE_API_BASE_URL` dans `.env` avec l'URL complète, `/api` inclus
    (ex. `https://mondomaine.example/api`), puis reconstruire le frontend :
    `docker compose up -d --build frontend`
 4. Ajouter le domaine à `server.allowedHosts` dans `frontend/vite.config.ts` — le serveur de dev
@@ -55,4 +66,9 @@ que la page se charge normalement.
 
 ## État actuel
 
-Squelette de projet : structure des modules NestJS (un par domaine du MVP), routes et pages React, service Python de scoring fonctionnel avec sa formule de confiance, environnement docker-compose opérationnel. La logique métier (persistance, ingestion réelle, RBAC connecté à une base) reste à implémenter — voir la section 10 de la spécification pour les décisions encore ouvertes.
+MVP fonctionnel : ingestion réelle, détection et validation des relations, constructeur de vues
+(drag-and-drop, agrégations, graphiques), tableaux de bord, partage par groupe, exports Excel/PDF,
+authentification locale et RBAC réellement appliqués, rétention avec journal d'audit, écrans
+d'administration. LDAP/SMTP présents mais volontairement inactifs (phase 2, cf. spécification).
+Reste ouvert : masquage des colonnes sensibles et durées légales de rétention confirmées (décisions
+métier/juridiques, cf. section 10 de la spécification), activation effective de la phase 2.
