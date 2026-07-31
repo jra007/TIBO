@@ -2,11 +2,11 @@ import { Body, Controller, Get, Param, Post, Put, Req } from '@nestjs/common';
 import type { AuthenticatedRequest } from '../auth/authenticated-request';
 import { RequirePermission } from '../rbac/decorators/require-permission.decorator';
 import type { Permission } from '../rbac/permissions';
-import { AuthSettingsService } from './settings/auth-settings.service';
+import { AuthSettingsService, type AuthSettings } from './settings/auth-settings.service';
 import { GroupsService } from './settings/groups.service';
 import { RetentionSettingsService, type RetentionPolicy } from './settings/retention-settings.service';
 import { RolesService } from './settings/roles.service';
-import { SmtpSettingsService } from './settings/smtp-settings.service';
+import { SmtpSettingsService, type SmtpSettings } from './settings/smtp-settings.service';
 import { UsersService } from './settings/users.service';
 
 @Controller('admin/settings')
@@ -42,9 +42,19 @@ export class AdminController {
     return this.authSettings.get();
   }
 
+  @Put('auth')
+  updateAuthSettings(@Body() body: AuthSettings, @Req() req: AuthenticatedRequest) {
+    return this.authSettings.update(body, req.user.id);
+  }
+
   @Get('smtp')
   getSmtpSettings() {
     return this.smtpSettings.get();
+  }
+
+  @Put('smtp')
+  updateSmtpSettings(@Body() body: SmtpSettings, @Req() req: AuthenticatedRequest) {
+    return this.smtpSettings.update(body, req.user.id);
   }
 
   @Get('users')

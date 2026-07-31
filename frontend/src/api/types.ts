@@ -114,3 +114,19 @@ export interface RetentionPolicy {
   unit: RetentionUnit;
   status: RetentionStatus;
 }
+
+export interface AuthSettings {
+  activeMode: 'local' | 'ldap';
+  ldap: {
+    serverUrl: string;
+    baseDn: string;
+    attributeMapping: Record<string, string>;
+  };
+}
+
+export interface SmtpSettings {
+  serverUrl: string;
+  port: number;
+  credentialsSecretRef: string;
+  senderAddress: string;
+}
