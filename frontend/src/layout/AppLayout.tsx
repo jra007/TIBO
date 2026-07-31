@@ -17,7 +17,9 @@ export function AppLayout() {
         <NavLink to="/views">Mes vues</NavLink>
         <NavLink to="/dashboards">Tableaux de bord</NavLink>
         {canAccessSettings && <NavLink to="/admin">Paramétrage</NavLink>}
-        <span>{session?.user.displayName}</span>
+        <NavLink to="/account" className="account-link">
+          {session?.user.displayName}
+        </NavLink>
         <button type="button" onClick={handleLogout}>
           Se déconnecter
         </button>

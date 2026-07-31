@@ -4,6 +4,7 @@ import { RequireAuth } from './auth/RequireAuth';
 import { RequirePermissionRoute } from './auth/RequirePermissionRoute';
 import { AppLayout } from './layout/AppLayout';
 import { LoginPage } from './pages/LoginPage';
+import { AccountPage } from './pages/AccountPage';
 import { ViewsPage } from './pages/ViewsPage';
 import { ViewDetailPage } from './pages/ViewDetailPage';
 import { DashboardsPage } from './pages/DashboardsPage';
@@ -34,6 +35,7 @@ function App() {
           <Route path="/views/new" element={<ViewBuilderPage />} />
           <Route path="/views/:id" element={<ViewDetailPage />} />
           <Route path="/dashboards" element={<DashboardsPage />} />
+          <Route path="/account" element={<AccountPage />} />
           <Route
             path="/admin"
             element={
