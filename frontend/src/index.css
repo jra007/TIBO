@@ -269,7 +269,7 @@ label {
   margin-top: 8px;
 }
 
-input,
+input:not([type='checkbox']):not([type='radio']),
 select,
 textarea {
   font: inherit;
@@ -282,11 +282,38 @@ textarea {
   max-width: 360px;
 }
 
+input[type='checkbox'],
+input[type='radio'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  margin: 0;
+  flex-shrink: 0;
+}
+
 input:focus,
 select:focus,
 textarea:focus {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+/* A <label> wrapping a checkbox/radio (e.g. a permissions list) reads as one aligned row,
+   not the block/inline default meant for a text-input's caption label above it. */
+fieldset > label:has(input[type='checkbox']),
+fieldset > label:has(input[type='radio']) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-weight: 400;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+fieldset > label:has(input[type='checkbox']):last-child,
+fieldset > label:has(input[type='radio']):last-child {
+  margin-bottom: 0;
 }
 
 fieldset {
