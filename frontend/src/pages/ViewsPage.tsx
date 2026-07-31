@@ -116,8 +116,12 @@ export function ViewsPage() {
 
   return (
     <section>
-      <h1>Mes vues</h1>
-      <Link to="/views/new">Créer une vue</Link>
+      <div className="page-header">
+        <h1>Mes vues</h1>
+        <Link to="/views/new" className="button">
+          + Créer une vue
+        </Link>
+      </div>
 
       {error && (
         <p role="alert" className="error">

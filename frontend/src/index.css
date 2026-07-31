@@ -208,6 +208,37 @@ a:hover {
   min-width: 0;
 }
 
+/* ---------- Page header (title + primary action) ---------- */
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.page-header h1 {
+  margin: 0;
+}
+
+/* An <a>/<Link> styled to read as a button, e.g. "Créer une vue" */
+a.button {
+  display: inline-block;
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+a.button:hover {
+  background: var(--accent-hover);
+  text-decoration: none;
+}
+
 /* ---------- Login ---------- */
 
 .login-page {
@@ -354,6 +385,25 @@ button:hover:not(:disabled) {
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Secondary look for a table row's non-primary actions (export, etc.) — the primary
+   accent fill is reserved for the one main call to action per row/section. */
+td button {
+  background: var(--surface-raised);
+  color: var(--ink);
+  border: 1px solid var(--border-strong);
+  font-weight: 500;
+}
+
+td button:hover:not(:disabled) {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+td button + button {
+  margin-left: 8px;
 }
 
 /* Icon-only remove buttons inside shelf items */
