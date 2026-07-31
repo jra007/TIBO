@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../../api/client';
 import type { TableSchema } from '../../api/types';
-import { CURRENT_USER_ID } from '../../auth/currentUser';
 import { FieldChip } from './FieldChip';
 import { ShelfDropZone } from './ShelfDropZone';
 import { emptyShelfAssignment, SHELVES, type Field, type ShelfAssignment, type ShelfId } from './shelves';
@@ -62,7 +61,6 @@ export function ViewBuilderPage() {
     try {
       const stripId = (fields: Field[]) => fields.map(({ tableName, columnName }) => ({ tableName, columnName }));
       await apiClient.post('/views', {
-        ownerId: CURRENT_USER_ID,
         name,
         chartType: activeChartType,
         shelves: {

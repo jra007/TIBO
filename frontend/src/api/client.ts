@@ -1,12 +1,29 @@
+import { clearSession, loadSession } from '../auth/session';
+
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
+
+function authHeader(): Record<string, string> {
+  const token = loadSession()?.token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function handleUnauthorized(response: Response) {
+  if (response.status === 401) {
+    clearSession();
+    window.location.assign('/login');
+  }
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeader() },
     ...options,
   });
-  if (!response.ok) throw new Error(`Request failed: ${response.status} ${path}`);
+  if (!response.ok) {
+    handleUnauthorized(response);
+    throw new Error(`Request failed: ${response.status} ${path}`);
+  }
   return response.json() as Promise<T>;
 }
 
@@ -15,9 +32,13 @@ async function requestForm<T>(path: string, formData: FormData): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',
     credentials: 'include',
+    headers: authHeader(),
     body: formData,
   });
-  if (!response.ok) throw new Error(`Request failed: ${response.status} ${path}`);
+  if (!response.ok) {
+    handleUnauthorized(response);
+    throw new Error(`Request failed: ${response.status} ${path}`);
+  }
   return response.json() as Promise<T>;
 }
 

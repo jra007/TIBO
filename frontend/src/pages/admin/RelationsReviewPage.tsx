@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { CURRENT_USER_ID } from '../../auth/currentUser';
 import { apiClient } from '../../api/client';
 import type { DetectedRelation } from '../../api/types';
 
@@ -43,7 +42,7 @@ export function RelationsReviewPage() {
   }
 
   async function act(relation: DetectedRelation, action: 'validate' | 'reject') {
-    await apiClient.post(`/relations/${relation.id}/${action}`, { adminUserId: CURRENT_USER_ID });
+    await apiClient.post(`/relations/${relation.id}/${action}`);
     await refresh();
   }
 

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import type { SavedView } from '../api/types';
-import { CURRENT_USER_ID } from '../auth/currentUser';
 
 const RELATION_STATUS_LABELS: Record<SavedView['relationStatus'], string> = {
   validated: 'Relation validée',
@@ -50,7 +49,7 @@ export function ViewsPage() {
 
   async function refreshMine() {
     try {
-      setMyViews(await apiClient.get<SavedView[]>(`/views/mine?ownerId=${encodeURIComponent(CURRENT_USER_ID)}`));
+      setMyViews(await apiClient.get<SavedView[]>('/views/mine'));
     } catch {
       setError('Impossible de charger vos vues.');
     }

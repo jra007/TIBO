@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
-import { PermissionsProvider } from './auth/PermissionsContext';
+import { AuthProvider } from './auth/AuthContext';
+import { RequireAuth } from './auth/RequireAuth';
 import { RequirePermissionRoute } from './auth/RequirePermissionRoute';
 import { AppLayout } from './layout/AppLayout';
 import { LoginPage } from './pages/LoginPage';
@@ -15,15 +16,18 @@ import { RbacPage } from './pages/admin/RbacPage';
 import { AuthSettingsPage } from './pages/admin/AuthSettingsPage';
 import { SmtpSettingsPage } from './pages/admin/SmtpSettingsPage';
 
-// TODO: replace with permissions resolved from the authenticated session once auth is wired up.
-const CURRENT_USER_PERMISSIONS = ['view:read', 'view:create', 'view:share', 'settings:access'] as const;
-
 function App() {
   return (
-    <PermissionsProvider permissions={[...CURRENT_USER_PERMISSIONS]}>
+    <AuthProvider>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route element={<AppLayout />}>
+        <Route
+          element={
+            <RequireAuth>
+              <AppLayout />
+            </RequireAuth>
+          }
+        >
           <Route index element={<Navigate to="/views" replace />} />
           <Route path="/views" element={<ViewsPage />} />
           <Route path="/views/new" element={<ViewBuilderPage />} />
@@ -61,7 +65,7 @@ function App() {
           </Route>
         </Route>
       </Routes>
-    </PermissionsProvider>
+    </AuthProvider>
   );
 }
 

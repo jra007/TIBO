@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
-import { usePermission, type Permission } from './PermissionsContext';
+import { usePermission, type Permission } from './AuthContext';
 
 /**
  * Client-side gate for UX only — the real enforcement against direct URL access
