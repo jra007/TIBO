@@ -25,8 +25,8 @@ export function ShelfDropZone({
   const { setNodeRef, isOver } = useDroppable({ id });
 
   return (
-    <div ref={setNodeRef} className="shelf-drop-zone" data-over={isOver} role="group" aria-label={`Zone ${label}`}>
-      <h3>{label}</h3>
+    <fieldset ref={setNodeRef} className="shelf-drop-zone" data-over={isOver}>
+      <legend>{label}</legend>
       <ul>
         {fields.map((field) => (
           <li key={field.id}>
@@ -54,6 +54,6 @@ export function ShelfDropZone({
           </li>
         ))}
       </ul>
-    </div>
+    </fieldset>
   );
 }

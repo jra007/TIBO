@@ -40,7 +40,7 @@ export function ViewDetailPage() {
     <section>
       <Link to="/views">← Mes vues</Link>
       <h1>{view.name}</h1>
-      {view.relationStatus !== 'validated' && <p role="status">{RELATION_STATUS_LABELS[view.relationStatus]}</p>}
+      {view.relationStatus !== 'validated' && <output>{RELATION_STATUS_LABELS[view.relationStatus]}</output>}
       <ViewChart chartType={view.chartType} dimensionField={view.shelves.rows[0]} measureField={view.shelves.columns[0]} rows={rows} />
     </section>
   );
