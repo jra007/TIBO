@@ -25,29 +25,31 @@ export function LoginPage() {
   }
 
   return (
-    <section>
-      <h1>Connexion</h1>
-      <form aria-label="Formulaire de connexion" onSubmit={handleSubmit}>
-        <label htmlFor="username">Identifiant</label>
-        <input id="username" name="username" type="text" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} />
-        <label htmlFor="password">Mot de passe</label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-        {error && (
-          <p role="alert" className="error">
-            {error}
-          </p>
-        )}
-        <button type="submit" disabled={submitting}>
-          {submitting ? 'Connexion…' : 'Se connecter'}
-        </button>
-      </form>
-    </section>
+    <div className="login-page">
+      <section>
+        <h1>TIBO</h1>
+        <form aria-label="Formulaire de connexion" onSubmit={handleSubmit}>
+          <label htmlFor="username">Identifiant</label>
+          <input id="username" name="username" type="text" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} />
+          <label htmlFor="password">Mot de passe</label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          {error && (
+            <p role="alert" className="error">
+              {error}
+            </p>
+          )}
+          <button type="submit" disabled={submitting}>
+            {submitting ? 'Connexion…' : 'Se connecter'}
+          </button>
+        </form>
+      </section>
+    </div>
   );
 }

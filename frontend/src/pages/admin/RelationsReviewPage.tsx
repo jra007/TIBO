@@ -1,11 +1,18 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from '../../api/client';
 import type { DetectedRelation } from '../../api/types';
+import { StatusBadge, type StatusTone } from '../../components/StatusBadge';
 
 const STATUS_LABELS: Record<DetectedRelation['status'], string> = {
   proposed: 'Proposée',
   validated: 'Validée',
   rejected: 'Rejetée',
+};
+
+const STATUS_TONES: Record<DetectedRelation['status'], StatusTone> = {
+  proposed: 'warning',
+  validated: 'good',
+  rejected: 'critical',
 };
 
 export function RelationsReviewPage() {
@@ -80,7 +87,9 @@ export function RelationsReviewPage() {
                 {relation.targetTable}.{relation.targetColumn}
               </td>
               <td>{Math.round(relation.confidenceScore * 100)}%</td>
-              <td>{STATUS_LABELS[relation.status]}</td>
+              <td>
+                <StatusBadge tone={STATUS_TONES[relation.status]}>{STATUS_LABELS[relation.status]}</StatusBadge>
+              </td>
               <td>
                 <button type="button" disabled={relation.status !== 'proposed'} onClick={() => act(relation, 'validate')}>
                   Valider

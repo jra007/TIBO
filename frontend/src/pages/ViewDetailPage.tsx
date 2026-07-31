@@ -2,12 +2,19 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import type { SavedView } from '../api/types';
+import { StatusBadge, type StatusTone } from '../components/StatusBadge';
 import { ViewChart } from './view-builder/ViewChart';
 
 const RELATION_STATUS_LABELS: Record<SavedView['relationStatus'], string> = {
   validated: 'Relation validée',
   pending: 'Relation non validée',
   to_fix: 'À corriger',
+};
+
+const RELATION_STATUS_TONES: Record<SavedView['relationStatus'], StatusTone> = {
+  validated: 'good',
+  pending: 'warning',
+  to_fix: 'critical',
 };
 
 export function ViewDetailPage() {
@@ -40,7 +47,11 @@ export function ViewDetailPage() {
     <section>
       <Link to="/views">← Mes vues</Link>
       <h1>{view.name}</h1>
-      {view.relationStatus !== 'validated' && <output>{RELATION_STATUS_LABELS[view.relationStatus]}</output>}
+      {view.relationStatus !== 'validated' && (
+        <output style={{ display: 'block', marginBottom: 12 }}>
+          <StatusBadge tone={RELATION_STATUS_TONES[view.relationStatus]}>{RELATION_STATUS_LABELS[view.relationStatus]}</StatusBadge>
+        </output>
+      )}
       <ViewChart chartType={view.chartType} dimensionField={view.shelves.rows[0]} measureField={view.shelves.columns[0]} rows={rows} />
     </section>
   );

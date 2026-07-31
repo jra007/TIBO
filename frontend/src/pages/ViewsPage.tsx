@@ -2,12 +2,23 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import type { SavedView } from '../api/types';
+import { StatusBadge, type StatusTone } from '../components/StatusBadge';
 
 const RELATION_STATUS_LABELS: Record<SavedView['relationStatus'], string> = {
   validated: 'Relation validée',
   pending: 'Relation non validée',
   to_fix: 'À corriger',
 };
+
+const RELATION_STATUS_TONES: Record<SavedView['relationStatus'], StatusTone> = {
+  validated: 'good',
+  pending: 'warning',
+  to_fix: 'critical',
+};
+
+function RelationStatusBadge({ status }: { status: SavedView['relationStatus'] }) {
+  return <StatusBadge tone={RELATION_STATUS_TONES[status]}>{RELATION_STATUS_LABELS[status]}</StatusBadge>;
+}
 
 function ViewRow({ view, onShared }: { view: SavedView; onShared: () => void }) {
   const [sharing, setSharing] = useState(false);
@@ -57,7 +68,7 @@ function ViewRow({ view, onShared }: { view: SavedView; onShared: () => void }) 
       </td>
       <td>{view.chartType}</td>
       <td>{view.visibility === 'private' ? 'Privée' : `Partagée (${view.sharedWithGroupId})`}</td>
-      <td>{RELATION_STATUS_LABELS[view.relationStatus]}</td>
+      <td><RelationStatusBadge status={view.relationStatus} /></td>
       <td>
         {view.visibility === 'private' && (
           <button type="button" onClick={handleShare} disabled={sharing}>
@@ -154,7 +165,7 @@ export function ViewsPage() {
               <tr key={view.id}>
                 <td>{view.name}</td>
                 <td>{view.chartType}</td>
-                <td>{RELATION_STATUS_LABELS[view.relationStatus]}</td>
+                <td><RelationStatusBadge status={view.relationStatus} /></td>
               </tr>
             ))}
           </tbody>

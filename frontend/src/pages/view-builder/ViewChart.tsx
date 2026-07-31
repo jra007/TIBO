@@ -1,10 +1,15 @@
-import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis } from 'recharts';
 import type { ChartType } from './suggestChartType';
 
 interface Field {
   tableName: string;
   columnName: string;
 }
+
+// Single-series charts only (one aggregated measure) — series-1 blue from the validated palette.
+const SERIES_COLOR = '#2a78d6';
+const GRIDLINE_COLOR = '#e1e0d9';
+const AXIS_COLOR = '#898781';
 
 interface ViewChartProps {
   chartType: ChartType;
@@ -82,30 +87,27 @@ export function ViewChart({ chartType, dimensionField, measureField, rows }: Vie
       <ResponsiveContainer width="100%" height={300}>
         {chartType === 'bar' ? (
           <BarChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
-            <YAxis />
+            <CartesianGrid stroke={GRIDLINE_COLOR} vertical={false} />
+            <XAxis dataKey="name" stroke={AXIS_COLOR} tick={{ fill: AXIS_COLOR, fontSize: 12 }} />
+            <YAxis stroke={AXIS_COLOR} tick={{ fill: AXIS_COLOR, fontSize: 12 }} />
             <Tooltip />
-            <Legend />
-            <Bar dataKey="value" fill="#8884d8" />
+            <Bar dataKey="value" fill={SERIES_COLOR} radius={[4, 4, 0, 0]} />
           </BarChart>
         ) : chartType === 'line' ? (
           <LineChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
-            <YAxis />
+            <CartesianGrid stroke={GRIDLINE_COLOR} vertical={false} />
+            <XAxis dataKey="name" stroke={AXIS_COLOR} tick={{ fill: AXIS_COLOR, fontSize: 12 }} />
+            <YAxis stroke={AXIS_COLOR} tick={{ fill: AXIS_COLOR, fontSize: 12 }} />
             <Tooltip />
-            <Legend />
-            <Line type="monotone" dataKey="value" stroke="#8884d8" />
+            <Line type="monotone" dataKey="value" stroke={SERIES_COLOR} strokeWidth={2} dot={{ r: 4, fill: SERIES_COLOR }} />
           </LineChart>
         ) : (
           <ScatterChart>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" type="category" />
-            <YAxis dataKey="value" />
+            <CartesianGrid stroke={GRIDLINE_COLOR} />
+            <XAxis dataKey="name" type="category" stroke={AXIS_COLOR} tick={{ fill: AXIS_COLOR, fontSize: 12 }} />
+            <YAxis dataKey="value" stroke={AXIS_COLOR} tick={{ fill: AXIS_COLOR, fontSize: 12 }} />
             <Tooltip />
-            <Legend />
-            <Scatter data={data} fill="#8884d8" />
+            <Scatter data={data} fill={SERIES_COLOR} />
           </ScatterChart>
         )}
       </ResponsiveContainer>
