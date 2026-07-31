@@ -34,6 +34,7 @@ function App() {
           <Route path="/views" element={<ViewsPage />} />
           <Route path="/views/new" element={<ViewBuilderPage />} />
           <Route path="/views/:id" element={<ViewDetailPage />} />
+          <Route path="/views/:id/edit" element={<ViewBuilderPage />} />
           <Route path="/dashboards" element={<DashboardsPage />} />
           <Route path="/account" element={<AccountPage />} />
           <Route

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Req } from '@nestjs/common';
 import type { AuthenticatedRequest } from '../auth/authenticated-request';
 import { RequirePermission } from '../rbac/decorators/require-permission.decorator';
 import { ViewsService, type CreateViewInput } from './views.service';
@@ -29,6 +29,12 @@ export class ViewsController {
   @RequirePermission('view:read')
   getById(@Param('id') id: string) {
     return this.viewsService.getById(id);
+  }
+
+  @Put(':id')
+  @RequirePermission('view:create')
+  update(@Param('id') id: string, @Req() req: AuthenticatedRequest, @Body() input: CreateViewInput) {
+    return this.viewsService.update(id, req.user.id, input);
   }
 
   @Get(':id/data')

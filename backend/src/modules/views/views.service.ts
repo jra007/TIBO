@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../../database/database.constants';
 import { buildViewDataQuery } from './view-query-builder';
@@ -71,6 +71,29 @@ export class ViewsService {
         relation_ids: JSON.stringify(relationIds),
         visibility: 'private',
         shared_with_group_id: null,
+      })
+      .returning('*');
+    return this.toDomain(row);
+  }
+
+  /** Only the owner can edit their own view — re-pins relations since the shelves may reference different tables now. */
+  async update(viewId: string, ownerId: string, input: CreateViewInput): Promise<SavedView> {
+    const existing: ViewRow | undefined = await this.knex('views').where({ id: viewId }).first();
+    if (!existing) throw new NotFoundException(`View ${viewId} not found`);
+    if (existing.owner_id !== ownerId) throw new ForbiddenException("Vous n'êtes pas propriétaire de cette vue");
+
+    const tablesUsed = extractTablesUsed(input.shelves);
+    const relationIds = await this.pinRelationsForTablePairs(tablesUsed);
+
+    const [row]: ViewRow[] = await this.knex('views')
+      .where({ id: viewId })
+      .update({
+        name: input.name,
+        chart_type: input.chartType,
+        shelves: JSON.stringify(input.shelves),
+        tables_used: JSON.stringify(tablesUsed),
+        relation_ids: JSON.stringify(relationIds),
+        updated_at: new Date(),
       })
       .returning('*');
     return this.toDomain(row);

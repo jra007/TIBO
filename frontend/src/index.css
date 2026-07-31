@@ -389,20 +389,25 @@ button:disabled {
 
 /* Secondary look for a table row's non-primary actions (export, etc.) — the primary
    accent fill is reserved for the one main call to action per row/section. */
-td button {
+td button,
+td a.button {
   background: var(--surface-raised);
   color: var(--ink);
   border: 1px solid var(--border-strong);
   font-weight: 500;
 }
 
-td button:hover:not(:disabled) {
+td button:hover:not(:disabled),
+td a.button:hover {
   background: var(--accent-bg);
   border-color: var(--accent);
   color: var(--accent);
 }
 
-td button + button {
+td > button + button,
+td > a.button + button,
+td > button + a.button,
+td > a.button + a.button {
   margin-left: 8px;
 }
 

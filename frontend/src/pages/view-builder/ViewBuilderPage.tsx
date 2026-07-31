@@ -1,8 +1,8 @@
 import { DndContext, type DragEndEvent } from '@dnd-kit/core';
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { apiClient } from '../../api/client';
-import type { TableSchema } from '../../api/types';
+import type { SavedView, TableSchema } from '../../api/types';
 import { FieldChip } from './FieldChip';
 import { ShelfDropZone } from './ShelfDropZone';
 import { emptyShelfAssignment, SHELVES, type Aggregation, type Field, type ShelfAssignment, type ShelfId } from './shelves';
@@ -19,13 +19,27 @@ function schemasToFields(schemas: TableSchema[]): Field[] {
   );
 }
 
+function fieldRefToField(ref: { tableName: string; columnName: string; aggregation?: Aggregation }, availableFields: Field[]): Field {
+  const match = availableFields.find((f) => f.tableName === ref.tableName && f.columnName === ref.columnName);
+  return {
+    id: `${ref.tableName}.${ref.columnName}`,
+    tableName: ref.tableName,
+    columnName: ref.columnName,
+    dtype: match?.dtype ?? 'text',
+    aggregation: ref.aggregation,
+  };
+}
+
 export function ViewBuilderPage() {
+  const { id } = useParams<{ id: string }>();
+  const isEditing = Boolean(id);
   const navigate = useNavigate();
   const [availableFields, setAvailableFields] = useState<Field[]>([]);
   const [shelves, setShelves] = useState<ShelfAssignment>(emptyShelfAssignment);
   const [manualChartType, setManualChartType] = useState<ChartType | null>(null);
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
+  const [loadingExisting, setLoadingExisting] = useState(isEditing);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -34,6 +48,26 @@ export function ViewBuilderPage() {
       .then((schemas) => setAvailableFields(schemasToFields(schemas)))
       .catch(() => setError("Impossible de charger les champs. Importez d'abord des fichiers."));
   }, []);
+
+  useEffect(() => {
+    if (!id || availableFields.length === 0) return;
+    apiClient
+      .get<SavedView>(`/views/${id}`)
+      .then((view) => {
+        setName(view.name);
+        setManualChartType(view.chartType);
+        setShelves({
+          rows: view.shelves.rows.map((f) => fieldRefToField(f, availableFields)),
+          columns: view.shelves.columns.map((f) => fieldRefToField(f, availableFields)),
+          color: view.shelves.color.map((f) => fieldRefToField(f, availableFields)),
+          size: view.shelves.size.map((f) => fieldRefToField(f, availableFields)),
+          filters: view.shelves.filters.map((f) => fieldRefToField(f, availableFields)),
+        });
+      })
+      .catch(() => setError('Impossible de charger cette vue.'))
+      .finally(() => setLoadingExisting(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, availableFields.length]);
 
   const suggestedChartType = useMemo(() => suggestChartType(shelves), [shelves]);
   const activeChartType = manualChartType ?? suggestedChartType;
@@ -71,7 +105,7 @@ export function ViewBuilderPage() {
     setError(null);
     try {
       const stripId = (fields: Field[]) => fields.map(({ tableName, columnName, aggregation }) => ({ tableName, columnName, aggregation }));
-      await apiClient.post('/views', {
+      const payload = {
         name,
         chartType: activeChartType,
         shelves: {
@@ -81,8 +115,14 @@ export function ViewBuilderPage() {
           size: stripId(shelves.size),
           filters: stripId(shelves.filters),
         },
-      });
-      navigate('/views');
+      };
+      if (isEditing) {
+        await apiClient.put(`/views/${id}`, payload);
+        navigate(`/views/${id}`);
+      } else {
+        await apiClient.post('/views', payload);
+        navigate('/views');
+      }
     } catch {
       setError('Échec de la sauvegarde de la vue.');
     } finally {
@@ -90,9 +130,11 @@ export function ViewBuilderPage() {
     }
   }
 
+  if (loadingExisting) return <p>Chargement…</p>;
+
   return (
     <section>
-      <h1>Constructeur de vues</h1>
+      <h1>{isEditing ? 'Modifier la vue' : 'Constructeur de vues'}</h1>
 
       {error && (
         <p role="alert" className="error">

@@ -70,6 +70,9 @@ function ViewRow({ view, onShared }: { view: SavedView; onShared: () => void }) 
       <td>{view.visibility === 'private' ? 'Privée' : `Partagée (${view.sharedWithGroupId})`}</td>
       <td><RelationStatusBadge status={view.relationStatus} /></td>
       <td>
+        <Link to={`/views/${view.id}/edit`} className="button">
+          Modifier
+        </Link>
         {view.visibility === 'private' && (
           <button type="button" onClick={handleShare} disabled={sharing}>
             Partager
