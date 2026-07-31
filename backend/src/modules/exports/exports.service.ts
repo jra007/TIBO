@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import { KNEX_CONNECTION } from '../../database/database.constants';
 import { AuditService } from '../audit/audit.service';
 import { buildViewDataQuery } from '../views/view-query-builder';
+import { buildPrintableHtml, renderHtmlToPdf } from './render-pdf';
 
 @Injectable()
 export class ExportsService {
@@ -12,9 +13,20 @@ export class ExportsService {
     private readonly auditService: AuditService,
   ) {}
 
-  async exportToPdf(viewOrDashboardId: string): Promise<Buffer> {
-    void viewOrDashboardId;
-    throw new Error('Not implemented: needs a headless-browser rendering pipeline (Puppeteer/Playwright), not yet added');
+  /** Streamed directly in the response, never written to disk — same "never stored" reasoning as Excel. */
+  async exportToPdf(viewId: string, actorUserId: string): Promise<Buffer> {
+    const view = await this.knex('views').where({ id: viewId }).first();
+    if (!view) throw new NotFoundException(`View ${viewId} not found`);
+
+    const { headers, query, mapRow } = await buildViewDataQuery(this.knex, view.shelves, view.relation_ids);
+    const rows = (await query).map(mapRow);
+
+    const html = buildPrintableHtml(view.name, headers, rows);
+    const buffer = await renderHtmlToPdf(html);
+
+    await this.auditService.record({ actorUserId, action: 'export.pdf', target: viewId });
+
+    return buffer;
   }
 
   /** SheetJS-based export of underlying data, headers + types preserved. Streamed directly in the

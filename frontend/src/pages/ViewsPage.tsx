@@ -38,6 +38,18 @@ function ViewRow({ view, onShared }: { view: SavedView; onShared: () => void }) 
     }
   }
 
+  async function handleExportPdf() {
+    setExporting(true);
+    setError(null);
+    try {
+      await apiClient.download(`/exports/pdf/${view.id}`, `${view.name}.pdf`);
+    } catch {
+      setError("Échec de l'export.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <tr>
       <td>
@@ -54,6 +66,9 @@ function ViewRow({ view, onShared }: { view: SavedView; onShared: () => void }) 
         )}
         <button type="button" onClick={handleExportExcel} disabled={exporting}>
           Exporter en Excel
+        </button>
+        <button type="button" onClick={handleExportPdf} disabled={exporting}>
+          Exporter en PDF
         </button>
         {error && (
           <span role="alert" className="error">

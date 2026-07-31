@@ -10,9 +10,14 @@ export class ExportsController {
 
   @Post('pdf/:id')
   @RequirePermission('export:pdf')
-  async pdf(@Param('id') id: string, @Res() res: Response) {
-    const buffer = await this.exportsService.exportToPdf(id);
-    res.set({ 'Content-Type': 'application/pdf' }).send(buffer);
+  async pdf(@Param('id') id: string, @Req() req: AuthenticatedRequest, @Res() res: Response) {
+    const buffer = await this.exportsService.exportToPdf(id, req.user.id);
+    res
+      .set({
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="export-${id}.pdf"`,
+      })
+      .send(buffer);
   }
 
   @Post('excel/:id')
