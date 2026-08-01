@@ -763,8 +763,15 @@ tbody tr:hover {
 
 /* ---------- View builder ---------- */
 
+.fields-column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
 .calculated-field-section {
-  margin-bottom: 20px;
+  margin-bottom: 0;
 }
 
 .view-builder-layout {
@@ -879,8 +886,8 @@ tbody tr:hover {
 
 .calculated-field-form .simple-condition-builder select,
 .calculated-field-form .simple-condition-builder input {
-  width: auto;
-  max-width: 160px;
+  width: 100%;
+  max-width: 100%;
   margin: 0;
 }
 

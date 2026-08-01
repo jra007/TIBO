@@ -287,58 +287,60 @@ export function ViewBuilderPage() {
       )}
 
       <DndContext onDragEnd={handleDragEnd}>
-        <div className="calculated-field-section">
-          <div className="page-actions">
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => {
-                setSimpleCondition(emptySimpleCondition());
-                setEditingCalculatedField('new');
-              }}
-            >
-              + Champ calculé
-            </button>
-          </div>
-
-          {editingCalculatedField && (
-            <CalculatedFieldEditor
-              availableFields={schemaFields}
-              editing={editingCalculatedField === 'new' ? null : editingCalculatedField}
-              simpleCondition={simpleCondition}
-              onSimpleConditionChange={setSimpleCondition}
-              onSave={handleSaveCalculatedField}
-              onDelete={handleDeleteCalculatedField}
-              onCancel={() => setEditingCalculatedField(null)}
-            />
-          )}
-        </div>
-
         <div className="view-builder-layout">
-          <aside aria-label="Champs disponibles">
-            <h2>Champs</h2>
-            <label htmlFor="field-search" className="visually-hidden">
-              Rechercher un champ
-            </label>
-            <input
-              id="field-search"
-              type="search"
-              placeholder="Rechercher un champ…"
-              value={fieldSearch}
-              onChange={(e) => setFieldSearch(e.target.value)}
-            />
+          <div className="fields-column">
+            <div className="calculated-field-section">
+              <div className="page-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => {
+                    setSimpleCondition(emptySimpleCondition());
+                    setEditingCalculatedField('new');
+                  }}
+                >
+                  + Champ calculé
+                </button>
+              </div>
 
-            {visibleFields.map((field) => (
-              <FieldChip
-                key={field.id}
-                field={fieldById[field.id]}
-                onAddToShelf={(shelfId) => assignToShelf(field, shelfId)}
-                onRename={handleRename}
-                onEditCalculatedField={handleEditCalculatedField}
+              {editingCalculatedField && (
+                <CalculatedFieldEditor
+                  availableFields={schemaFields}
+                  editing={editingCalculatedField === 'new' ? null : editingCalculatedField}
+                  simpleCondition={simpleCondition}
+                  onSimpleConditionChange={setSimpleCondition}
+                  onSave={handleSaveCalculatedField}
+                  onDelete={handleDeleteCalculatedField}
+                  onCancel={() => setEditingCalculatedField(null)}
+                />
+              )}
+            </div>
+
+            <aside aria-label="Champs disponibles">
+              <h2>Champs</h2>
+              <label htmlFor="field-search" className="visually-hidden">
+                Rechercher un champ
+              </label>
+              <input
+                id="field-search"
+                type="search"
+                placeholder="Rechercher un champ…"
+                value={fieldSearch}
+                onChange={(e) => setFieldSearch(e.target.value)}
               />
-            ))}
-            {fieldSearch && visibleFields.length === 0 && <p>Aucun champ ne correspond à « {fieldSearch} ».</p>}
-          </aside>
+
+              {visibleFields.map((field) => (
+                <FieldChip
+                  key={field.id}
+                  field={fieldById[field.id]}
+                  onAddToShelf={(shelfId) => assignToShelf(field, shelfId)}
+                  onRename={handleRename}
+                  onEditCalculatedField={handleEditCalculatedField}
+                />
+              ))}
+              {fieldSearch && visibleFields.length === 0 && <p>Aucun champ ne correspond à « {fieldSearch} ».</p>}
+            </aside>
+          </div>
           <div className="shelves">
             {SHELVES.map((shelf) => (
               <ShelfDropZone
