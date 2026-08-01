@@ -1,6 +1,9 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../../database/database.constants';
+import { AuditService } from '../audit/audit.service';
+import type { Permission } from '../rbac/permissions';
+import { RbacService } from '../rbac/rbac.service';
 import { ColumnProfilerService } from '../relations/column-profiler.service';
 import { collectFieldRefs, FormulaError, parseFormula, type FormulaDtype } from './formula';
 import { quickStatNeedsOrderField, type QuickStatField } from './quick-stats';
@@ -95,6 +98,8 @@ export class ViewsService {
   constructor(
     @Inject(KNEX_CONNECTION) private readonly knex: Knex,
     private readonly columnProfiler: ColumnProfilerService,
+    private readonly rbac: RbacService,
+    private readonly audit: AuditService,
   ) {}
 
   async create(ownerId: string, input: CreateViewInput): Promise<SavedView> {
@@ -102,6 +107,7 @@ export class ViewsService {
     const quickStatFields = input.quickStatFields ?? [];
     const calculatedFieldTables = await this.validateCalculatedFields(calculatedFields);
     this.validateQuickStatFields(quickStatFields, input.shelves);
+    if (calculatedFields.length > 0) await this.requirePermission(ownerId, 'field:calculated:create');
     const tablesUsed = [...new Set([...extractTablesUsed(input.shelves), ...calculatedFieldTables])];
     const relationIds = await this.pinRelationsForTablePairs(tablesUsed);
 
@@ -119,6 +125,10 @@ export class ViewsService {
         shared_with_group_id: null,
       })
       .returning('*');
+
+    for (const field of calculatedFields) {
+      await this.audit.record({ actorUserId: ownerId, action: 'calculated_field.create', target: `views/${row.id}`, after: field });
+    }
     return this.toDomain(row);
   }
 
@@ -132,6 +142,11 @@ export class ViewsService {
     const quickStatFields = input.quickStatFields ?? [];
     const calculatedFieldTables = await this.validateCalculatedFields(calculatedFields);
     this.validateQuickStatFields(quickStatFields, input.shelves);
+
+    const calculatedFieldChanges = diffCalculatedFields(existing.calculated_fields, calculatedFields);
+    if (calculatedFieldChanges.some((c) => c.action === 'create')) await this.requirePermission(ownerId, 'field:calculated:create');
+    if (calculatedFieldChanges.some((c) => c.action === 'update' || c.action === 'delete')) await this.requirePermission(ownerId, 'field:calculated:edit');
+
     const tablesUsed = [...new Set([...extractTablesUsed(input.shelves), ...calculatedFieldTables])];
     const relationIds = await this.pinRelationsForTablePairs(tablesUsed);
 
@@ -148,7 +163,28 @@ export class ViewsService {
         updated_at: new Date(),
       })
       .returning('*');
+
+    for (const change of calculatedFieldChanges) {
+      await this.audit.record({
+        actorUserId: ownerId,
+        action: `calculated_field.${change.action}`,
+        target: `views/${viewId}`,
+        before: change.before ?? undefined,
+        after: change.action === 'delete' ? undefined : change.field,
+      });
+    }
     return this.toDomain(row);
+  }
+
+  /** Throws unless the user holds `permission` — the decorator-based guard only covers the whole
+   * route (view:create), but calculated-field creation/editing needs its own, narrower check since
+   * it depends on what's actually in the payload (a view update with no calculated-field changes
+   * shouldn't require field:calculated:edit at all). */
+  private async requirePermission(userId: string, permission: Permission): Promise<void> {
+    const granted = await this.rbac.getPermissionsForUser(userId);
+    if (!granted.includes(permission)) {
+      throw new ForbiddenException(`Permission manquante : ${permission}`);
+    }
   }
 
   /**
@@ -336,4 +372,29 @@ export class ViewsService {
 function extractTablesUsed(shelves: ShelfDefinition): string[] {
   const allFields = [...shelves.rows, ...shelves.columns, ...shelves.color, ...shelves.size, ...shelves.filters];
   return [...new Set(allFields.map((field) => field.tableName))];
+}
+
+interface CalculatedFieldChange {
+  action: 'create' | 'update' | 'delete';
+  field: CalculatedField;
+  before: CalculatedField | null;
+}
+
+/** Matched by id — a field's own identity never changes, only its label/formula/dtype. Feeds both the RBAC gate (create vs. edit needs different permissions) and the audit trail (before/after per field). */
+function diffCalculatedFields(before: CalculatedField[], after: CalculatedField[]): CalculatedFieldChange[] {
+  const beforeById = new Map(before.map((f) => [f.id, f]));
+  const afterIds = new Set(after.map((f) => f.id));
+  const changes: CalculatedFieldChange[] = [];
+
+  for (const field of after) {
+    const prior = beforeById.get(field.id);
+    if (!prior) changes.push({ action: 'create', field, before: null });
+    else if (prior.formula !== field.formula || prior.label !== field.label || prior.dtype !== field.dtype) {
+      changes.push({ action: 'update', field, before: prior });
+    }
+  }
+  for (const field of before) {
+    if (!afterIds.has(field.id)) changes.push({ action: 'delete', field, before: field });
+  }
+  return changes;
 }

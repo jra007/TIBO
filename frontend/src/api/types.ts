@@ -183,6 +183,9 @@ export const PERMISSIONS = [
   'settings:reset:execute',
   'ingestion:manage',
   'settings:appearance:edit',
+  'field:calculated:create',
+  'field:calculated:edit',
+  'field:calculated:share',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

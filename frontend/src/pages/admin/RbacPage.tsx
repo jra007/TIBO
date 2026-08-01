@@ -15,6 +15,9 @@ const PERMISSION_LABELS: Record<Permission, string> = {
   'settings:reset:execute': 'Réinitialiser toutes les données',
   'ingestion:manage': "Supprimer l'historique d'ingestion",
   'settings:appearance:edit': "Modifier l'apparence",
+  'field:calculated:create': 'Créer un champ calculé',
+  'field:calculated:edit': 'Modifier un champ calculé',
+  'field:calculated:share': 'Partager un champ calculé',
 };
 
 export function RbacPage() {
