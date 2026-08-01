@@ -13,6 +13,7 @@ import {
   type SavedView,
   type TableSchema,
 } from '../../api/types';
+import { BLOCK_ROOT_DROP_ID, emptyBlockExpr, pathFromBlockDropId, setBlockExprAtPath, type BlockExpr } from './block-formula';
 import { CalculatedFieldEditor } from './CalculatedFieldEditor';
 import { FieldChip } from './FieldChip';
 import { QuickStatMenu, type QuickStatMenuPosition } from './QuickStatMenu';
@@ -89,6 +90,7 @@ export function ViewBuilderPage() {
   const [calculatedFields, setCalculatedFields] = useState<CalculatedField[]>([]);
   const [editingCalculatedField, setEditingCalculatedField] = useState<'new' | CalculatedField | null>(null);
   const [simpleCondition, setSimpleCondition] = useState<SimpleCondition>(emptySimpleCondition());
+  const [blockExpr, setBlockExpr] = useState<BlockExpr>(emptyBlockExpr());
   const [quickStatFields, setQuickStatFields] = useState<QuickStatField[]>([]);
   const [quickStatMenu, setQuickStatMenu] = useState<{ field: Field; position: QuickStatMenuPosition } | null>(null);
   const [fieldSearch, setFieldSearch] = useState('');
@@ -254,6 +256,7 @@ export function ViewBuilderPage() {
     const existing = calculatedFields.find((f) => f.id === field.columnName);
     if (existing) {
       setSimpleCondition(emptySimpleCondition());
+      setBlockExpr(emptyBlockExpr());
       setEditingCalculatedField(existing);
     }
   }
@@ -292,6 +295,12 @@ export function ViewBuilderPage() {
 
     if (overId === CONDITION_FIELD_DROP_ID) {
       setSimpleCondition((prev) => ({ ...prev, fieldId: field.id }));
+      return;
+    }
+    if (overId === BLOCK_ROOT_DROP_ID || overId.startsWith(`${BLOCK_ROOT_DROP_ID}.`)) {
+      if (field.dtype !== 'numeric') return; // block formulas are arithmetic-only — reject non-numeric drops
+      const path = pathFromBlockDropId(overId);
+      setBlockExpr((prev) => setBlockExprAtPath(prev, path, { kind: 'field', fieldId: field.id }));
       return;
     }
     assignToShelf(field, overId as ShelfId);
@@ -394,6 +403,7 @@ export function ViewBuilderPage() {
                   className="secondary"
                   onClick={() => {
                     setSimpleCondition(emptySimpleCondition());
+                    setBlockExpr(emptyBlockExpr());
                     setEditingCalculatedField('new');
                   }}
                 >
@@ -415,6 +425,7 @@ export function ViewBuilderPage() {
                           className="secondary"
                           onClick={() => {
                             setSimpleCondition(emptySimpleCondition());
+                            setBlockExpr(emptyBlockExpr());
                             setEditingCalculatedField(calculatedField);
                           }}
                         >
@@ -435,6 +446,8 @@ export function ViewBuilderPage() {
                   editing={editingCalculatedField === 'new' ? null : editingCalculatedField}
                   simpleCondition={simpleCondition}
                   onSimpleConditionChange={setSimpleCondition}
+                  blockExpr={blockExpr}
+                  onBlockExprChange={setBlockExpr}
                   onSave={handleSaveCalculatedField}
                   onDelete={handleDeleteCalculatedField}
                   onCancel={() => setEditingCalculatedField(null)}

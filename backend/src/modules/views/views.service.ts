@@ -5,7 +5,7 @@ import { AuditService } from '../audit/audit.service';
 import type { Permission } from '../rbac/permissions';
 import { RbacService } from '../rbac/rbac.service';
 import { ColumnProfilerService } from '../relations/column-profiler.service';
-import { collectFieldRefs, FormulaError, parseFormula, type FormulaDtype } from './formula';
+import { collectFieldRefs, compileFormula, FormulaError, parseFormula, type FormulaDtype } from './formula';
 import { quickStatNeedsOrderField, type QuickStatField } from './quick-stats';
 import { buildViewDataQuery } from './view-query-builder';
 
@@ -210,6 +210,41 @@ export class ViewsService {
       }
     }
     return [...tables];
+  }
+
+  /**
+   * Live preview of a calculated field's result on a small data sample, before the field is even
+   * saved (addendum's "aperçu du résultat" requirement). Reuses the exact same parse/compile path
+   * as a real query — a formula that previews correctly behaves identically once saved. Scoped to
+   * formulas referencing a single table: a formula spanning multiple tables needs the same
+   * relation-walking `buildViewDataQuery` does for a real view, which doesn't exist yet at preview
+   * time (no view has been saved to pin relations on) — those return a clear message instead of a
+   * best-effort join guess.
+   */
+  async previewCalculatedField(formula: string, dtype: FormulaDtype): Promise<{ rows: unknown[]; error?: string }> {
+    const schemas = await this.columnProfiler.listTableSchemas();
+    const availableFields = schemas.flatMap((table) => table.columns.map((column) => ({ tableName: table.tableName, columnName: column.columnName })));
+
+    let ast;
+    try {
+      ast = parseFormula(formula, availableFields);
+    } catch (error) {
+      return { rows: [], error: error instanceof FormulaError ? error.message : 'Formule invalide.' };
+    }
+
+    const tables = [...new Set(collectFieldRefs(ast).map((ref) => ref.tableName))];
+    if (tables.length === 0) return { rows: [], error: 'La formule ne référence aucun champ — impossible de générer un aperçu.' };
+    if (tables.length > 1) return { rows: [], error: 'Aperçu indisponible pour une formule combinant plusieurs fichiers — il sera visible après sauvegarde de la vue.' };
+
+    try {
+      const { sql, bindings } = compileFormula(formula, dtype, null);
+      const rows: { value: unknown }[] = await this.knex(tables[0])
+        .select(this.knex.raw(`${sql} as value`, bindings))
+        .limit(10);
+      return { rows: rows.map((row) => row.value) };
+    } catch {
+      return { rows: [], error: "Erreur lors du calcul de l'aperçu — vérifiez la formule." };
+    }
   }
 
   /**

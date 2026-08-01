@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Put, Req } from '@nestjs/common';
 import type { AuthenticatedRequest } from '../auth/authenticated-request';
 import { RequirePermission } from '../rbac/decorators/require-permission.decorator';
+import type { FormulaDtype } from './formula';
 import { ViewsService, type CreateViewInput } from './views.service';
 
 @Controller('views')
@@ -11,6 +12,12 @@ export class ViewsController {
   @RequirePermission('view:create')
   create(@Req() req: AuthenticatedRequest, @Body() input: CreateViewInput) {
     return this.viewsService.create(req.user.id, input);
+  }
+
+  @Post('preview-calculated-field')
+  @RequirePermission('view:create')
+  previewCalculatedField(@Body() body: { formula: string; dtype: FormulaDtype }) {
+    return this.viewsService.previewCalculatedField(body.formula, body.dtype);
   }
 
   @Get('mine')

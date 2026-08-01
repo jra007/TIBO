@@ -996,6 +996,129 @@ tbody tr:hover {
   background: transparent;
 }
 
+.block-formula-editor {
+  margin: 12px 0;
+}
+
+.block-slot {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.block-slot-empty {
+  padding: 8px 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.block-slot-empty[data-over='true'] {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.block-slot-empty[data-invalid='true'] {
+  border-color: var(--critical);
+  background: var(--critical-bg, var(--surface));
+}
+
+.block-slot-placeholder {
+  color: var(--ink-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.block-slot-empty select,
+.block-slot-empty button {
+  width: auto;
+  margin: 0;
+}
+
+.block-slot-filled {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+}
+
+.block-slot-filled input {
+  width: 90px;
+  margin: 0;
+}
+
+.block-slot-filled button {
+  background: transparent;
+  color: var(--ink-muted);
+  padding: 0 4px;
+  margin: 0;
+}
+
+.block-slot-filled button:hover {
+  color: var(--critical);
+  background: transparent;
+}
+
+.block-slot-operation {
+  flex-wrap: wrap;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.block-operator {
+  font-weight: 700;
+  color: var(--ink-secondary);
+}
+
+.block-operator-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+}
+
+.block-slot-operation > button {
+  background: transparent;
+  color: var(--ink-muted);
+  padding: 0 4px;
+  margin: 0;
+}
+
+.block-slot-operation > button:hover {
+  color: var(--critical);
+  background: transparent;
+}
+
+.calculated-field-preview {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  font-size: 13px;
+}
+
+.calculated-field-preview ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.calculated-field-preview li {
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-family: ui-monospace, monospace;
+}
+
 .shelf-drop-zone {
   min-height: 60px;
   transition: border-color 0.15s, background 0.15s;

@@ -1,6 +1,9 @@
 import { useDroppable } from '@dnd-kit/core';
 import { useState } from 'react';
+import { apiClient } from '../../api/client';
 import type { CalculatedField, FormulaDtype } from '../../api/types';
+import { BlockFormulaEditor } from './BlockFormulaEditor';
+import { compileBlockExpr, isBlockExprComplete, type BlockExpr } from './block-formula';
 import { displayLabel, valueInputType, type Field } from './shelves';
 import { CONDITION_FIELD_DROP_ID, COMPARISON_LABELS, compileSimpleCondition, type ComparisonOperator, type SimpleCondition } from './simple-condition';
 
@@ -34,6 +37,8 @@ export function CalculatedFieldEditor({
   editing,
   simpleCondition,
   onSimpleConditionChange,
+  blockExpr,
+  onBlockExprChange,
   onSave,
   onDelete,
   onCancel,
@@ -43,28 +48,53 @@ export function CalculatedFieldEditor({
   editing: CalculatedField | null;
   simpleCondition: SimpleCondition;
   onSimpleConditionChange: (condition: SimpleCondition) => void;
+  blockExpr: BlockExpr;
+  onBlockExprChange: (expr: BlockExpr) => void;
   onSave: (field: CalculatedField) => void;
   onDelete: (id: string) => void;
   onCancel: () => void;
 }) {
   const [label, setLabel] = useState(editing?.label ?? '');
   const [dtype, setDtype] = useState<FormulaDtype>(editing?.dtype ?? 'text');
-  const [mode, setMode] = useState<'simple' | 'advanced'>(editing ? 'advanced' : 'simple');
+  const [mode, setMode] = useState<'simple' | 'blocks' | 'advanced'>(editing ? 'advanced' : 'simple');
   const [formula, setFormula] = useState(editing?.formula ?? '');
   const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ loading: boolean; rows: unknown[]; error: string | null } | null>(null);
 
   const conditionField = simpleCondition.fieldId ? (availableFields.find((f) => f.id === simpleCondition.fieldId) ?? null) : null;
   const conditionValueInputType = conditionField ? valueInputType(conditionField.dtype) : 'text';
+  const fieldsById = Object.fromEntries(availableFields.map((f) => [f.id, f]));
 
   function insertFieldRef(field: Field) {
     setFormula((prev) => `${prev}${prev && !prev.endsWith(' ') ? ' ' : ''}[${field.tableName}.${field.columnName}]`);
   }
 
   function switchToAdvanced() {
-    if (conditionField && simpleCondition.value && simpleCondition.thenValue && simpleCondition.elseValue) {
+    if (mode === 'simple' && conditionField && simpleCondition.value && simpleCondition.thenValue && simpleCondition.elseValue) {
       setFormula(compileSimpleCondition(simpleCondition, dtype, conditionField));
+    } else if (mode === 'blocks' && isBlockExprComplete(blockExpr)) {
+      try {
+        setFormula(compileBlockExpr(blockExpr, fieldsById));
+      } catch {
+        // incomplete tree — leave the existing formula text untouched
+      }
     }
     setMode('advanced');
+  }
+
+  async function handlePreview() {
+    if (!isBlockExprComplete(blockExpr)) {
+      setPreview({ loading: false, rows: [], error: 'Complétez la formule avant de générer un aperçu.' });
+      return;
+    }
+    setPreview({ loading: true, rows: [], error: null });
+    try {
+      const compiled = compileBlockExpr(blockExpr, fieldsById);
+      const result = await apiClient.post<{ rows: unknown[]; error?: string }>('/views/preview-calculated-field', { formula: compiled, dtype });
+      setPreview({ loading: false, rows: result.rows, error: result.error ?? null });
+    } catch (err) {
+      setPreview({ loading: false, rows: [], error: err instanceof Error ? err.message : "Échec de l'aperçu." });
+    }
   }
 
   function handleSubmit(event: React.FormEvent) {
@@ -81,6 +111,15 @@ export function CalculatedFieldEditor({
         return;
       }
       onSave({ id: editing?.id ?? crypto.randomUUID(), label, dtype, formula: compileSimpleCondition(simpleCondition, dtype, conditionField) });
+      return;
+    }
+
+    if (mode === 'blocks') {
+      if (!isBlockExprComplete(blockExpr)) {
+        setError('Complétez tous les blocs (champs, constantes) avant d’enregistrer.');
+        return;
+      }
+      onSave({ id: editing?.id ?? crypto.randomUUID(), label, dtype, formula: compileBlockExpr(blockExpr, fieldsById) });
       return;
     }
 
@@ -104,7 +143,10 @@ export function CalculatedFieldEditor({
 
       <div className="page-actions" role="tablist" aria-label="Mode de formule">
         <button type="button" className={mode === 'simple' ? undefined : 'secondary'} onClick={() => setMode('simple')}>
-          Glisser-déposer
+          Condition (SI/ALORS)
+        </button>
+        <button type="button" className={mode === 'blocks' ? undefined : 'secondary'} onClick={() => setMode('blocks')}>
+          Formule par blocs
         </button>
         <button type="button" className={mode === 'advanced' ? undefined : 'secondary'} onClick={switchToAdvanced}>
           Formule texte
@@ -162,6 +204,35 @@ export function CalculatedFieldEditor({
             placeholder="ex. Petit client"
           />
         </div>
+      ) : mode === 'blocks' ? (
+        <>
+          <BlockFormulaEditor expr={blockExpr} fieldsById={fieldsById} onChange={onBlockExprChange} />
+          <p>Glissez un champ numérique dans un emplacement vide, ou choisissez « 123 » pour une constante et « + Opération » pour combiner plusieurs blocs.</p>
+
+          <div className="page-actions">
+            <button type="button" className="secondary" onClick={handlePreview} disabled={preview?.loading}>
+              {preview?.loading ? 'Calcul…' : 'Aperçu'}
+            </button>
+          </div>
+
+          {preview && (
+            <div className="calculated-field-preview">
+              {preview.error && (
+                <p role="alert" className="error">
+                  {preview.error}
+                </p>
+              )}
+              {!preview.error && preview.rows.length === 0 && <p>Aucune donnée disponible pour l’aperçu.</p>}
+              {!preview.error && preview.rows.length > 0 && (
+                <ul>
+                  {preview.rows.map((value, index) => (
+                    <li key={index}>{String(value)}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </>
       ) : (
         <>
           <label htmlFor="calc-formula">Formule</label>
