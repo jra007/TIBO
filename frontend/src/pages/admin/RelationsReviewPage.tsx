@@ -53,12 +53,47 @@ export function RelationsReviewPage() {
     await refresh();
   }
 
+  async function deleteProposed() {
+    setLoading(true);
+    setError(null);
+    try {
+      await apiClient.delete('/relations/proposed');
+      await refresh();
+    } catch {
+      setError('Échec de la suppression des propositions.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function deleteAll() {
+    if (!window.confirm('Supprimer TOUTES les relations, y compris celles déjà validées ou rejetées ? Cette action est irréversible.')) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await apiClient.delete('/relations/all');
+      await refresh();
+    } catch {
+      setError('Échec de la suppression complète.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <section>
       <h2>Relations détectées</h2>
-      <button type="button" onClick={detect} disabled={loading}>
-        Relancer la détection
-      </button>
+      <div className="page-actions">
+        <button type="button" onClick={detect} disabled={loading}>
+          Relancer la détection
+        </button>
+        <button type="button" onClick={deleteProposed} disabled={loading}>
+          Supprimer les propositions
+        </button>
+        <button type="button" className="danger" onClick={deleteAll} disabled={loading}>
+          Tout supprimer
+        </button>
+      </div>
 
       {error && (
         <p role="alert" className="error">
@@ -74,6 +109,7 @@ export function RelationsReviewPage() {
             <th scope="col">Cible</th>
             <th scope="col">Score de confiance</th>
             <th scope="col">Statut</th>
+            <th scope="col">Détecté le</th>
             <th scope="col">Actions</th>
           </tr>
         </thead>
@@ -90,6 +126,7 @@ export function RelationsReviewPage() {
               <td>
                 <StatusBadge tone={STATUS_TONES[relation.status]}>{STATUS_LABELS[relation.status]}</StatusBadge>
               </td>
+              <td>{new Date(relation.createdAt).toLocaleString('fr-FR')}</td>
               <td>
                 <button type="button" disabled={relation.status !== 'proposed'} onClick={() => act(relation, 'validate')}>
                   Valider

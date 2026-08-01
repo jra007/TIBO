@@ -29,6 +29,12 @@ export class IngestionController {
     return this.columnProfiler.listTableSchemas();
   }
 
+  /** Full ingestion history (all past imports, with dates), not just the current upload's result. */
+  @Get('journal')
+  listJournal() {
+    return this.ingestionService.listJournal();
+  }
+
   /** Cosmetic display label for a column, for readability in the builder/charts/exports — doesn't rename the underlying data. */
   @Put('tables/:tableName/columns/:columnName/label')
   @RequirePermission('view:create')

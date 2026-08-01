@@ -3,6 +3,7 @@ import type { AuthenticatedRequest } from '../auth/authenticated-request';
 import { RequirePermission } from '../rbac/decorators/require-permission.decorator';
 import type { Permission } from '../rbac/permissions';
 import { AuthSettingsService, type AuthSettings } from './settings/auth-settings.service';
+import { DataResetService } from './settings/data-reset.service';
 import { GroupsService } from './settings/groups.service';
 import { RetentionSettingsService, type RetentionPolicy } from './settings/retention-settings.service';
 import { RolesService } from './settings/roles.service';
@@ -19,6 +20,7 @@ export class AdminController {
     private readonly groupsService: GroupsService,
     private readonly rolesService: RolesService,
     private readonly usersService: UsersService,
+    private readonly dataResetService: DataResetService,
   ) {}
 
   @Get('retention')
@@ -109,5 +111,12 @@ export class AdminController {
   @RequirePermission('settings:rbac:edit')
   assignRoleToUser(@Param('roleId') roleId: string, @Param('userId') userId: string) {
     return this.rolesService.assignToUser(roleId, userId);
+  }
+
+  /** Full data reset — wipes all ingested business data, keeps users/roles/settings/audit_log. Requires a typed confirmation phrase. */
+  @Post('reset')
+  @RequirePermission('settings:reset:execute')
+  resetAllData(@Body('confirmation') confirmation: string, @Req() req: AuthenticatedRequest) {
+    return this.dataResetService.resetAll(req.user.id, confirmation);
   }
 }

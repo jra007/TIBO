@@ -17,6 +17,7 @@ export interface DetectedRelation {
   status: RelationStatus;
   validatedBy?: string;
   validatedAt?: Date;
+  createdAt: Date;
 }
 
 interface RelationCandidateDto {
@@ -41,6 +42,7 @@ interface DetectedRelationRow {
   status: RelationStatus;
   validated_by: string | null;
   validated_at: Date | null;
+  created_at: Date;
 }
 
 const RELATION_DETECTION_URL = process.env.RELATION_DETECTION_URL || 'http://localhost:8001';
@@ -56,6 +58,7 @@ function toDomain(row: DetectedRelationRow): DetectedRelation {
     status: row.status,
     validatedBy: row.validated_by ?? undefined,
     validatedAt: row.validated_at ?? undefined,
+    createdAt: row.created_at,
   };
 }
 
@@ -140,6 +143,27 @@ export class RelationsService {
     const query = this.knex('detected_relations').orderBy('confidence_score', 'desc');
     const rows: DetectedRelationRow[] = status ? await query.where({ status }) : await query;
     return rows.map(toDomain);
+  }
+
+  /** Clears undecided candidates only — the safe "declutter and re-detect" reset, no view depends on a proposed relation's identity. */
+  async deleteProposed(actorUserId: string): Promise<{ deletedCount: number }> {
+    const deletedCount = await this.knex('detected_relations').where({ status: 'proposed' }).delete();
+    await this.auditService.record({ actorUserId, action: 'relation.bulk_delete_proposed', target: 'detected_relations', after: { deletedCount } });
+    return { deletedCount };
+  }
+
+  /**
+   * Clears every relation, including validated/rejected decisions — a real "wipe and restart".
+   * Any view pinned to a deleted relation now finds nothing when ViewsService.computeRelationStatus
+   * looks it up by id and correctly reports "à corriger" rather than silently keeping a stale
+   * "validated" status (see the fix there). This bypasses the 12-month retention normally kept for
+   * rejected relations (spec 6bis) — acceptable because it's a deliberate, audited admin action, not
+   * an automatic purge job; the deletion itself is recorded here for traceability.
+   */
+  async deleteAll(actorUserId: string): Promise<{ deletedCount: number }> {
+    const deletedCount = await this.knex('detected_relations').delete();
+    await this.auditService.record({ actorUserId, action: 'relation.bulk_delete_all', target: 'detected_relations', after: { deletedCount } });
+    return { deletedCount };
   }
 
   async validate(relationId: string, adminUserId: string): Promise<DetectedRelation> {

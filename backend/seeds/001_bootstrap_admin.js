@@ -12,6 +12,7 @@ const ALL_PERMISSIONS = [
   'settings:access',
   'settings:retention:edit',
   'settings:rbac:edit',
+  'settings:reset:execute',
 ];
 
 const ADMIN_USERNAME = 'admin';

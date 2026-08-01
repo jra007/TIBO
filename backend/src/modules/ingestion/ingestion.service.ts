@@ -15,6 +15,16 @@ export interface IngestionResult {
   errors: string[];
 }
 
+export interface JournalEntry {
+  id: string;
+  fileName: string;
+  tableName: string;
+  rowCount: number;
+  status: 'success' | 'error';
+  errors: string[];
+  importedAt: Date;
+}
+
 const BATCH_SIZE = 500;
 
 @Injectable()
@@ -86,6 +96,20 @@ export class IngestionService {
   /** Cosmetic display name for a column — doesn't touch the underlying data or schema. */
   async setColumnLabel(tableName: string, columnName: string, label: string, actorUserId: string): Promise<void> {
     await setLabel(this.knex, tableName, columnName, label, actorUserId);
+  }
+
+  /** Full ingestion history, not just the current session's upload result — was persisted but never actually readable. */
+  async listJournal(): Promise<JournalEntry[]> {
+    const rows = await this.knex('ingestion_journal').orderBy('imported_at', 'desc');
+    return rows.map((row) => ({
+      id: row.id,
+      fileName: row.file_name,
+      tableName: row.table_name,
+      rowCount: row.row_count,
+      status: row.status,
+      errors: row.errors,
+      importedAt: row.imported_at,
+    }));
   }
 
   private async writeJournalEntry(result: IngestionResult, fileHash: string): Promise<void> {

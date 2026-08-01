@@ -10,6 +10,7 @@ import { ViewDetailPage } from './pages/ViewDetailPage';
 import { DashboardsPage } from './pages/DashboardsPage';
 import { ViewBuilderPage } from './pages/view-builder/ViewBuilderPage';
 import { AdminLayout } from './pages/admin/AdminLayout';
+import { DataResetPage } from './pages/admin/DataResetPage';
 import { IngestionJournalPage } from './pages/admin/IngestionJournalPage';
 import { RelationsReviewPage } from './pages/admin/RelationsReviewPage';
 import { RetentionSettingsPage } from './pages/admin/RetentionSettingsPage';
@@ -67,6 +68,14 @@ function App() {
             />
             <Route path="auth" element={<AuthSettingsPage />} />
             <Route path="smtp" element={<SmtpSettingsPage />} />
+            <Route
+              path="reset"
+              element={
+                <RequirePermissionRoute permission="settings:reset:execute">
+                  <DataResetPage />
+                </RequirePermissionRoute>
+              }
+            />
           </Route>
         </Route>
       </Routes>

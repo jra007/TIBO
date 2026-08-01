@@ -6,6 +6,16 @@ export interface IngestionResult {
   errors: string[];
 }
 
+export interface JournalEntry {
+  id: string;
+  fileName: string;
+  tableName: string;
+  rowCount: number;
+  status: 'success' | 'error';
+  errors: string[];
+  importedAt: string;
+}
+
 export type RelationStatus = 'proposed' | 'validated' | 'rejected';
 
 export interface DetectedRelation {
@@ -18,6 +28,7 @@ export interface DetectedRelation {
   status: RelationStatus;
   validatedBy?: string;
   validatedAt?: string;
+  createdAt: string;
 }
 
 export interface UploadResponse {
@@ -107,6 +118,7 @@ export const PERMISSIONS = [
   'settings:access',
   'settings:retention:edit',
   'settings:rbac:edit',
+  'settings:reset:execute',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

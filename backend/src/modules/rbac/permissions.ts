@@ -8,6 +8,7 @@ export const PERMISSIONS = [
   'settings:access',
   'settings:retention:edit',
   'settings:rbac:edit',
+  'settings:reset:execute',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

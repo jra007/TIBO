@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query, Req } from '@nestjs/common';
 import type { AuthenticatedRequest } from '../auth/authenticated-request';
 import { RequirePermission } from '../rbac/decorators/require-permission.decorator';
 import { RelationsService, type RelationStatus } from './relations.service';
@@ -17,6 +17,20 @@ export class RelationsController {
   @RequirePermission('relation:validate')
   detect(@Body('tables') tables?: string[]) {
     return this.relationsService.detectRelations(tables);
+  }
+
+  /** Bulk "declutter" — clears undecided candidates only, safe to re-detect afterward. */
+  @Delete('proposed')
+  @RequirePermission('relation:validate')
+  deleteProposed(@Req() req: AuthenticatedRequest) {
+    return this.relationsService.deleteProposed(req.user.id);
+  }
+
+  /** Bulk "wipe and restart" — clears every relation, including validated/rejected decisions. */
+  @Delete('all')
+  @RequirePermission('relation:validate')
+  deleteAll(@Req() req: AuthenticatedRequest) {
+    return this.relationsService.deleteAll(req.user.id);
   }
 
   @Post(':id/validate')

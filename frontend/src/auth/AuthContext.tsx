@@ -1,17 +1,9 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { apiClient } from '../api/client';
+import type { Permission } from '../api/types';
 import { clearSession, loadSession, saveSession, type Session } from './session';
 
-export type Permission =
-  | 'view:read'
-  | 'view:create'
-  | 'view:share'
-  | 'export:pdf'
-  | 'export:excel'
-  | 'relation:validate'
-  | 'settings:access'
-  | 'settings:retention:edit'
-  | 'settings:rbac:edit';
+export type { Permission };
 
 interface AuthContextValue {
   session: Session | null;

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AdminController } from './admin.controller';
 import { GroupsLookupController } from './groups-lookup.controller';
 import { AuthSettingsService } from './settings/auth-settings.service';
+import { DataResetService } from './settings/data-reset.service';
 import { GroupsService } from './settings/groups.service';
 import { RetentionSettingsService } from './settings/retention-settings.service';
 import { RolesService } from './settings/roles.service';
@@ -10,7 +11,7 @@ import { UsersService } from './settings/users.service';
 
 @Module({
   controllers: [AdminController, GroupsLookupController],
-  providers: [RetentionSettingsService, AuthSettingsService, SmtpSettingsService, GroupsService, RolesService, UsersService],
-  exports: [RetentionSettingsService, AuthSettingsService, SmtpSettingsService, GroupsService, RolesService, UsersService],
+  providers: [RetentionSettingsService, AuthSettingsService, SmtpSettingsService, GroupsService, RolesService, UsersService, DataResetService],
+  exports: [RetentionSettingsService, AuthSettingsService, SmtpSettingsService, GroupsService, RolesService, UsersService, DataResetService],
 })
 export class AdminModule {}

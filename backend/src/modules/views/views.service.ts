@@ -206,6 +206,9 @@ export class ViewsService {
 
     if (relationIds.length > 0) {
       const relations = await this.knex('detected_relations').whereIn('id', relationIds);
+      // A pinned relation can now be gone entirely (bulk relation delete/reset) — as bad as a
+      // rejection for a view that was built on it, so it needs the same "à corriger" treatment.
+      if (relations.length < relationIds.length) worst = 'to_fix';
       for (const relation of relations) {
         const pairStatus: ViewRelationStatus = relation.status === 'rejected' ? 'to_fix' : relation.status === 'proposed' ? 'pending' : 'validated';
         if (pairStatus === 'to_fix') worst = 'to_fix';

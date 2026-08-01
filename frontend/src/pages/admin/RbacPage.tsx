@@ -12,6 +12,7 @@ const PERMISSION_LABELS: Record<Permission, string> = {
   'settings:access': 'Accéder au menu paramétrage',
   'settings:retention:edit': 'Modifier la rétention',
   'settings:rbac:edit': 'Gérer les rôles et permissions',
+  'settings:reset:execute': 'Réinitialiser toutes les données',
 };
 
 export function RbacPage() {
