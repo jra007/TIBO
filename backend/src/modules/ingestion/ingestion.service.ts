@@ -4,7 +4,13 @@ import type { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../../database/database.constants';
 import { AuditService } from '../audit/audit.service';
 import { setLabel } from '../views/column-labels';
-import { inferColumnTypes, normalizeColumnName, normalizeTableName, normalizeValue, parseSpreadsheet } from './parsing';
+import {
+  inferColumnTypes,
+  normalizeColumnName,
+  normalizeTableName,
+  normalizeValue,
+  parseSpreadsheet,
+} from './parsing';
 
 export type ColumnType = 'text' | 'date' | 'numeric' | 'boolean';
 
@@ -28,6 +34,25 @@ export interface JournalEntry {
 
 const BATCH_SIZE = 500;
 
+function addColumn(
+  table: Knex.CreateTableBuilder,
+  column: { name: string; type: ColumnType },
+): void {
+  switch (column.type) {
+    case 'numeric':
+      table.double(column.name);
+      break;
+    case 'date':
+      table.timestamp(column.name, { useTz: true });
+      break;
+    case 'boolean':
+      table.boolean(column.name);
+      break;
+    default:
+      table.text(column.name);
+  }
+}
+
 @Injectable()
 export class IngestionService {
   private readonly logger = new Logger(IngestionService.name);
@@ -45,31 +70,65 @@ export class IngestionService {
     // genuinely different file re-using the same name must not be blocked (see addendum's case 2/3).
     // Only compares against previously *successful* imports — a failed or already-rejected attempt
     // never stored any data, so there is nothing to actually be a duplicate of.
-    const priorMatch = await this.knex('ingestion_journal').where({ file_hash: fileHash, status: 'success' }).orderBy('imported_at', 'desc').first();
+    const priorMatch = await this.knex('ingestion_journal')
+      .where({ file_hash: fileHash, status: 'success' })
+      .orderBy('imported_at', 'desc')
+      .first();
     if (priorMatch) {
       const message = `Ce fichier a déjà été importé le ${new Date(priorMatch.imported_at).toLocaleString('fr-FR')}.`;
-      const result: IngestionResult = { fileName, tableName, rowCount: 0, status: 'duplicate', errors: [message] };
+      const result: IngestionResult = {
+        fileName,
+        tableName,
+        rowCount: 0,
+        status: 'duplicate',
+        errors: [message],
+      };
       await this.writeJournalEntry(result, fileHash);
       return result;
     }
 
     try {
       const rowCount = await this.loadIntoTable(tableName, buffer);
-      const result: IngestionResult = { fileName, tableName, rowCount, status: 'success', errors: [] };
+      const result: IngestionResult = {
+        fileName,
+        tableName,
+        rowCount,
+        status: 'success',
+        errors: [],
+      };
       await this.writeJournalEntry(result, fileHash);
       return result;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error(`Ingestion failed for ${fileName}: ${message}`);
-      const result: IngestionResult = { fileName, tableName, rowCount: 0, status: 'error', errors: [message] };
+      const result: IngestionResult = {
+        fileName,
+        tableName,
+        rowCount: 0,
+        status: 'error',
+        errors: [message],
+      };
       await this.writeJournalEntry(result, fileHash);
       return result;
     }
   }
 
-  private async loadIntoTable(tableName: string, buffer: Buffer): Promise<number> {
+  /**
+   * Append-only: an existing table is never dropped or overwritten (see
+   * TIBO_addendum_doublons_et_dates.md). Every row carries `date_ingestion` (the UTC calendar day
+   * of its import batch — this app runs UTC throughout, Postgres session timezone is Etc/UTC, so
+   * that's the one consistent reference rather than an assumed business timezone) and
+   * `is_obsolete`. A second successful import of the *same file* on the *same* UTC day is a
+   * same-day correction: that day's still-current rows are marked obsolete (never deleted) and
+   * the new rows take their place; a later day is a plain append that never touches prior rows.
+   */
+  private async loadIntoTable(
+    tableName: string,
+    buffer: Buffer,
+  ): Promise<number> {
     const rows = parseSpreadsheet(buffer);
-    if (rows.length === 0) throw new Error('Fichier vide ou format non reconnu');
+    if (rows.length === 0)
+      throw new Error('Fichier vide ou format non reconnu');
 
     const headers = Object.keys(rows[0]);
     const columnTypes = inferColumnTypes(rows, headers);
@@ -79,44 +138,78 @@ export class IngestionService {
       type: columnTypes[header],
     }));
 
-    await this.knex.schema.dropTableIfExists(tableName);
-    await this.knex.schema.createTable(tableName, (table) => {
-      table.increments('id').primary();
+    const tableExists = await this.knex.schema.hasTable(tableName);
+
+    if (!tableExists) {
+      await this.knex.schema.createTable(tableName, (table) => {
+        table.increments('id').primary();
+        table.date('date_ingestion').notNullable();
+        table.boolean('is_obsolete').notNullable().defaultTo(false);
+        for (const column of columns) addColumn(table, column);
+      });
+    } else {
+      // Additive-only schema reconciliation: a column present in this import but not yet in the
+      // table gets added. A column type change or removal isn't handled — rare for a recurring
+      // daily export, and safely reconciling it needs a real migration, not a per-upload guess.
+      const existingColumns = await this.knex(tableName).columnInfo();
       for (const column of columns) {
-        switch (column.type) {
-          case 'numeric':
-            table.double(column.name);
-            break;
-          case 'date':
-            table.timestamp(column.name, { useTz: true });
-            break;
-          case 'boolean':
-            table.boolean(column.name);
-            break;
-          default:
-            table.text(column.name);
+        if (!existingColumns[column.name]) {
+          await this.knex.schema.alterTable(tableName, (table) =>
+            addColumn(table, column),
+          );
         }
       }
-    });
+    }
+
+    const todayUtc = new Date().toISOString().slice(0, 10);
+    const priorToday = tableExists
+      ? await this.knex('ingestion_journal')
+          .where({ table_name: tableName, status: 'success' })
+          .andWhereRaw('imported_at::date = ?::date', [todayUtc])
+          .first()
+      : undefined;
 
     const records = rows.map((row) => {
-      const record: Record<string, unknown> = {};
-      for (const column of columns) record[column.name] = normalizeValue(row[column.source], column.type);
+      const record: Record<string, unknown> = {
+        date_ingestion: todayUtc,
+        is_obsolete: false,
+      };
+      for (const column of columns)
+        record[column.name] = normalizeValue(row[column.source], column.type);
       return record;
     });
 
-    if (records.length > 0) await this.knex.batchInsert(tableName, records, BATCH_SIZE);
+    await this.knex.transaction(async (trx) => {
+      if (priorToday) {
+        await trx(tableName)
+          .where({ date_ingestion: todayUtc, is_obsolete: false })
+          .update({ is_obsolete: true });
+      }
+      if (records.length > 0)
+        await this.knex
+          .batchInsert(tableName, records, BATCH_SIZE)
+          .transacting(trx);
+    });
+
     return records.length;
   }
 
   /** Cosmetic display name for a column — doesn't touch the underlying data or schema. */
-  async setColumnLabel(tableName: string, columnName: string, label: string, actorUserId: string): Promise<void> {
+  async setColumnLabel(
+    tableName: string,
+    columnName: string,
+    label: string,
+    actorUserId: string,
+  ): Promise<void> {
     await setLabel(this.knex, tableName, columnName, label, actorUserId);
   }
 
   /** Full ingestion history, not just the current session's upload result — was persisted but never actually readable. */
   async listJournal(): Promise<JournalEntry[]> {
-    const rows = await this.knex('ingestion_journal').orderBy('imported_at', 'desc');
+    const rows = await this.knex('ingestion_journal').orderBy(
+      'imported_at',
+      'desc',
+    );
     return rows.map((row) => ({
       id: row.id,
       fileName: row.file_name,
@@ -136,13 +229,26 @@ export class IngestionService {
    * journal_ingestion carries a 5-year retention policy (spec 6bis) — this bypasses it the same
    * deliberate, audited way relation bulk-delete bypasses the rejected-relations retention.
    */
-  async deleteJournalEntries(ids: string[], actorUserId: string): Promise<{ deletedCount: number }> {
-    const deletedCount = await this.knex('ingestion_journal').whereIn('id', ids).delete();
-    await this.auditService.record({ actorUserId, action: 'ingestion.journal.delete_entries', target: 'ingestion_journal', after: { ids, deletedCount } });
+  async deleteJournalEntries(
+    ids: string[],
+    actorUserId: string,
+  ): Promise<{ deletedCount: number }> {
+    const deletedCount = await this.knex('ingestion_journal')
+      .whereIn('id', ids)
+      .delete();
+    await this.auditService.record({
+      actorUserId,
+      action: 'ingestion.journal.delete_entries',
+      target: 'ingestion_journal',
+      after: { ids, deletedCount },
+    });
     return { deletedCount };
   }
 
-  private async writeJournalEntry(result: IngestionResult, fileHash: string): Promise<void> {
+  private async writeJournalEntry(
+    result: IngestionResult,
+    fileHash: string,
+  ): Promise<void> {
     await this.knex('ingestion_journal').insert({
       file_name: result.fileName,
       table_name: result.tableName,
