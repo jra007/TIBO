@@ -57,6 +57,9 @@ export function FieldChip({
           <button
             type="button"
             aria-label={`Renommer ${field.tableName}.${field.columnName}`}
+            // dnd-kit's drag listeners are on the wrapping div and intercept pointerdown on any
+            // child before its click ever fires — stop it here so the button behaves normally.
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
               startRenaming();
@@ -75,6 +78,7 @@ export function FieldChip({
         <select
           aria-label={`Ajouter ${displayLabel(field)} à une zone`}
           value=""
+          onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => e.target.value && onAddToShelf(e.target.value as ShelfId)}
         >
           <option value="" disabled>

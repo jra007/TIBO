@@ -5,7 +5,17 @@ import { apiClient } from '../../api/client';
 import type { FilterCondition, SavedView, TableSchema } from '../../api/types';
 import { FieldChip } from './FieldChip';
 import { ShelfDropZone } from './ShelfDropZone';
-import { defaultFilterValue, emptyShelfAssignment, SHELVES, type Aggregation, type Field, type FilterValue, type ShelfAssignment, type ShelfId } from './shelves';
+import {
+  defaultFilterValue,
+  displayLabel,
+  emptyShelfAssignment,
+  SHELVES,
+  type Aggregation,
+  type Field,
+  type FilterValue,
+  type ShelfAssignment,
+  type ShelfId,
+} from './shelves';
 import { suggestChartType, type ChartType } from './suggestChartType';
 
 function schemasToFields(schemas: TableSchema[]): Field[] {
@@ -49,6 +59,7 @@ export function ViewBuilderPage() {
   const isEditing = Boolean(id);
   const navigate = useNavigate();
   const [availableFields, setAvailableFields] = useState<Field[]>([]);
+  const [fieldSearch, setFieldSearch] = useState('');
   const [shelves, setShelves] = useState<ShelfAssignment>(emptyShelfAssignment);
   const [manualChartType, setManualChartType] = useState<ChartType | null>(null);
   const [name, setName] = useState('');
@@ -89,6 +100,15 @@ export function ViewBuilderPage() {
   const fieldById = useMemo(() => Object.fromEntries(availableFields.map((f) => [f.id, f])), [availableFields]);
   const assignedFieldIds = useMemo(() => new Set(Object.values(shelves).flat().map((f) => f.id)), [shelves]);
   const hasAnyField = Object.values(shelves).some((fields) => fields.length > 0);
+
+  const unassignedFields = useMemo(() => availableFields.filter((f) => !assignedFieldIds.has(f.id)), [availableFields, assignedFieldIds]);
+  const visibleFields = useMemo(() => {
+    const query = fieldSearch.trim().toLowerCase();
+    if (!query) return unassignedFields;
+    return unassignedFields.filter(
+      (f) => displayLabel(f).toLowerCase().includes(query) || f.tableName.toLowerCase().includes(query) || f.columnName.toLowerCase().includes(query),
+    );
+  }, [unassignedFields, fieldSearch]);
 
   function assignToShelf(field: Field, shelfId: ShelfId) {
     if (shelfId === 'filters') {
@@ -207,9 +227,20 @@ export function ViewBuilderPage() {
         <div className="view-builder-layout">
           <aside aria-label="Champs disponibles">
             <h2>Champs</h2>
-            {availableFields.filter((f) => !assignedFieldIds.has(f.id)).map((field) => (
+            <label htmlFor="field-search" className="visually-hidden">
+              Rechercher un champ
+            </label>
+            <input
+              id="field-search"
+              type="search"
+              placeholder="Rechercher un champ…"
+              value={fieldSearch}
+              onChange={(e) => setFieldSearch(e.target.value)}
+            />
+            {visibleFields.map((field) => (
               <FieldChip key={field.id} field={fieldById[field.id]} onAddToShelf={(shelfId) => assignToShelf(field, shelfId)} onRename={handleRename} />
             ))}
+            {fieldSearch && visibleFields.length === 0 && <p>Aucun champ ne correspond à « {fieldSearch} ».</p>}
           </aside>
           <div className="shelves">
             {SHELVES.map((shelf) => (
