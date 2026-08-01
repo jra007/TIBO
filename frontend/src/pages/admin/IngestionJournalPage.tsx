@@ -134,10 +134,22 @@ export function IngestionJournalPage() {
       )}
 
       {result && (
-        <p>
-          {result.relations.length} relation(s) proposée(s) ou mise(s) à jour — voir l'onglet{' '}
-          <Link to="/admin/relations">Relations</Link>.
-        </p>
+        <div className="upload-result">
+          <ul>
+            {result.imports.map((entry, index) => (
+              <li key={index} className={entry.status === 'success' ? undefined : entry.status === 'duplicate' ? 'warning' : 'error'}>
+                <strong>{entry.fileName}</strong> —{' '}
+                {entry.status === 'success' ? `${entry.rowCount} ligne(s) importée(s)` : entry.errors.join(', ')}
+              </li>
+            ))}
+          </ul>
+          {result.relations.length > 0 && (
+            <p>
+              {result.relations.length} relation(s) proposée(s) ou mise(s) à jour — voir l'onglet{' '}
+              <Link to="/admin/relations">Relations</Link>.
+            </p>
+          )}
+        </div>
       )}
 
       <fieldset className="filter-bar">
@@ -209,7 +221,7 @@ export function IngestionJournalPage() {
               <td>{entry.fileName}</td>
               <td>{entry.tableName}</td>
               <td>{entry.rowCount}</td>
-              <td>{entry.status === 'success' ? 'Succès' : 'Erreur'}</td>
+              <td>{entry.status === 'success' ? 'Succès' : entry.status === 'duplicate' ? 'Doublon rejeté' : 'Erreur'}</td>
               <td>{entry.errors.join(', ')}</td>
             </tr>
           ))}

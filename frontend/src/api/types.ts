@@ -2,7 +2,7 @@ export interface IngestionResult {
   fileName: string;
   tableName: string;
   rowCount: number;
-  status: 'success' | 'error';
+  status: 'success' | 'error' | 'duplicate';
   errors: string[];
 }
 
@@ -11,7 +11,7 @@ export interface JournalEntry {
   fileName: string;
   tableName: string;
   rowCount: number;
-  status: 'success' | 'error';
+  status: 'success' | 'error' | 'duplicate';
   errors: string[];
   importedAt: string;
 }

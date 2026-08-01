@@ -12,7 +12,7 @@ export interface IngestionResult {
   fileName: string;
   tableName: string;
   rowCount: number;
-  status: 'success' | 'error';
+  status: 'success' | 'error' | 'duplicate';
   errors: string[];
 }
 
@@ -21,7 +21,7 @@ export interface JournalEntry {
   fileName: string;
   tableName: string;
   rowCount: number;
-  status: 'success' | 'error';
+  status: 'success' | 'error' | 'duplicate';
   errors: string[];
   importedAt: Date;
 }
@@ -40,6 +40,18 @@ export class IngestionService {
   async ingestFile(fileName: string, buffer: Buffer): Promise<IngestionResult> {
     const fileHash = createHash('sha256').update(buffer).digest('hex');
     const tableName = normalizeTableName(fileName);
+
+    // Content hash, not file name: a duplicate must be caught even if the file was renamed, and a
+    // genuinely different file re-using the same name must not be blocked (see addendum's case 2/3).
+    // Only compares against previously *successful* imports — a failed or already-rejected attempt
+    // never stored any data, so there is nothing to actually be a duplicate of.
+    const priorMatch = await this.knex('ingestion_journal').where({ file_hash: fileHash, status: 'success' }).orderBy('imported_at', 'desc').first();
+    if (priorMatch) {
+      const message = `Ce fichier a déjà été importé le ${new Date(priorMatch.imported_at).toLocaleString('fr-FR')}.`;
+      const result: IngestionResult = { fileName, tableName, rowCount: 0, status: 'duplicate', errors: [message] };
+      await this.writeJournalEntry(result, fileHash);
+      return result;
+    }
 
     try {
       const rowCount = await this.loadIntoTable(tableName, buffer);

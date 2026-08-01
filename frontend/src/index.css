@@ -761,6 +761,33 @@ tbody tr:hover {
   display: inline-block;
 }
 
+.upload-result ul {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.upload-result li {
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.upload-result li.warning {
+  background: var(--warning-bg, var(--critical-bg));
+  border-color: var(--warning, var(--critical));
+}
+
+.upload-result li.error {
+  background: var(--critical-bg);
+  border-color: var(--critical);
+}
+
 /* ---------- View builder ---------- */
 
 .shelves-column {
