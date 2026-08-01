@@ -258,7 +258,12 @@ class Parser {
 
     if (token.type === 'number') {
       this.next();
-      return { kind: 'literal', dtype: 'numeric', value: Number(token.value) };
+      // Kept as the original digit text, not `Number(token.value)`: a JS number is IEEE754
+      // float64, so converting here and binding that would round-trip every numeric literal
+      // through binary floating point before it ever reaches Postgres. Binding the exact text
+      // and letting Postgres parse it straight into `numeric` (see compileNode's 'literal' case)
+      // avoids that round-trip entirely.
+      return { kind: 'literal', dtype: 'numeric', value: token.value };
     }
     if (token.type === 'string') {
       this.next();
@@ -354,7 +359,9 @@ const BINARY_SQL: Record<BinaryOp, string> = {
 function compileNode(node: AstNode): CompiledSql {
   switch (node.kind) {
     case 'literal':
-      return { sql: '?', bindings: [node.value] };
+      // Numeric literals are bound as their exact source text and cast to `numeric` in SQL,
+      // so Postgres parses the decimal directly instead of via the `value` field's JS float64.
+      return node.dtype === 'numeric' ? { sql: '?::numeric', bindings: [node.value] } : { sql: '?', bindings: [node.value] };
     case 'field':
       return { sql: '??', bindings: [`${node.tableName}.${node.columnName}`] };
     case 'binary': {
@@ -393,8 +400,11 @@ function compileFunctionCall(name: string, args: CompiledSql[]): CompiledSql {
     case 'DATEDIFF':
       return { sql: `(${args[0].sql}::date - ${args[1].sql}::date)`, bindings };
     case 'ROUND':
+      // Postgres's 2-arg ROUND(numeric, int) needs the decimals count as an integer — the
+      // decimals argument is very often a bare numeric literal, which now compiles to
+      // `?::numeric` (see compileNode), so it's cast onward to `::int` here.
       return args.length === 2
-        ? { sql: `ROUND((${args[0].sql})::numeric, ${args[1].sql})`, bindings }
+        ? { sql: `ROUND((${args[0].sql})::numeric, (${args[1].sql})::int)`, bindings }
         : { sql: `ROUND((${args[0].sql})::numeric)`, bindings };
     case 'ABS':
       return { sql: `ABS(${args[0].sql})`, bindings };
@@ -406,7 +416,14 @@ function compileFunctionCall(name: string, args: CompiledSql[]): CompiledSql {
 
 const DTYPE_CAST: Record<FormulaDtype, string> = {
   text: 'text',
-  numeric: 'double precision',
+  // Exact decimal (Postgres `numeric`), not `double precision`: financial calculations must not
+  // carry binary floating-point rounding error. Combined with the literal-binding change above,
+  // this makes the calculated-field engine's own arithmetic decimal-exact end to end. Note this
+  // does NOT retroactively fix precision in source columns already stored as `double precision`
+  // by the ingestion pipeline (backend/src/modules/ingestion/ingestion.service.ts) — a field read
+  // from such a column already carries whatever rounding it acquired at ingestion time; this only
+  // guarantees no *further* precision is lost within the calculated field's own computation.
+  numeric: 'numeric',
   date: 'timestamptz',
   boolean: 'boolean',
 };
