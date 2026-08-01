@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import type { Dashboard, SavedView, ViewData } from '../api/types';
+import { CHART_TYPE_OPTIONS, loadStoredChartType, storeChartType } from './chart-presentation';
 import type { ChartType } from './view-builder/suggestChartType';
 import { ViewChart } from './view-builder/ViewChart';
 
@@ -11,23 +12,8 @@ interface DashboardTileData {
   headerLabels: Record<string, string>;
 }
 
-const CHART_TYPE_OPTIONS: { value: ChartType; label: string }[] = [
-  { value: 'bar', label: 'Barres' },
-  { value: 'line', label: 'Ligne' },
-  { value: 'scatter', label: 'Nuage de points' },
-  { value: 'heatmap', label: 'Carte de chaleur' },
-  { value: 'table', label: 'Table' },
-  { value: 'geo', label: 'Carte géographique' },
-];
-
-/** Per-viewer preference, not part of the dashboard's saved definition — each person can look at a shared dashboard differently. Kept in this browser only. */
 function presentationStorageKey(dashboardId: string, viewId: string): string {
   return `tibo:dashboard-presentation:${dashboardId}:${viewId}`;
-}
-
-function loadStoredPresentation(dashboardId: string, viewId: string): ChartType | null {
-  const stored = localStorage.getItem(presentationStorageKey(dashboardId, viewId));
-  return CHART_TYPE_OPTIONS.some((option) => option.value === stored) ? (stored as ChartType) : null;
 }
 
 export function DashboardDetailPage() {
@@ -55,7 +41,9 @@ export function DashboardDetailPage() {
         );
         setTiles(loaded);
         setPresentations(
-          Object.fromEntries(loaded.map((tile) => [tile.view.id, loadStoredPresentation(dashboardResult.id, tile.view.id) ?? tile.view.chartType])),
+          Object.fromEntries(
+            loaded.map((tile) => [tile.view.id, loadStoredChartType(presentationStorageKey(dashboardResult.id, tile.view.id)) ?? tile.view.chartType]),
+          ),
         );
       })
       .catch(() => setError('Impossible de charger ce tableau de bord.'));
@@ -63,7 +51,7 @@ export function DashboardDetailPage() {
 
   function handlePresentationChange(viewId: string, chartType: ChartType) {
     if (!id) return;
-    localStorage.setItem(presentationStorageKey(id, viewId), chartType);
+    storeChartType(presentationStorageKey(id, viewId), chartType);
     setPresentations((prev) => ({ ...prev, [viewId]: chartType }));
   }
 
