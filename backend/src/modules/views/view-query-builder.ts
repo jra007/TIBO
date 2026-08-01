@@ -1,6 +1,8 @@
 import type { Knex } from 'knex';
 import { getLabelsMap } from './column-labels';
-import type { Aggregation, FilterCondition, ShelfDefinition } from './views.service';
+import { collectFieldRefs, compileFormula, parseFormula } from './formula';
+import type { Aggregation, CalculatedField, FilterCondition, ShelfDefinition } from './views.service';
+import { CALCULATED_FIELD_TABLE } from './views.service';
 
 interface RelationRow {
   source_table: string;
@@ -30,28 +32,55 @@ function dedupeFields(fields: ShelfDefinition['rows']): ShelfDefinition['rows'] 
   return result;
 }
 
+/** Real tables a field touches — itself for a plain column, or its formula's own field references for a calculated one. */
+function realTablesFor(field: { tableName: string; columnName: string }, calculatedFieldsById: Map<string, CalculatedField>): string[] {
+  if (field.tableName !== CALCULATED_FIELD_TABLE) return [field.tableName];
+  const calculatedField = calculatedFieldsById.get(field.columnName);
+  if (!calculatedField) return [];
+  const ast = parseFormula(calculatedField.formula, null);
+  return collectFieldRefs(ast).map((ref) => ref.tableName);
+}
+
+/**
+ * A field is either a real column (resolves to a plain, safely-escaped identifier) or a
+ * calculated field (resolves to its formula, already validated at save time — see
+ * ViewsService.validateCalculatedFields — so re-parsing here skips the field-allowlist check).
+ */
+function resolveFieldSql(knex: Knex, field: { tableName: string; columnName: string }, calculatedFieldsById: Map<string, CalculatedField>): Knex.Raw {
+  if (field.tableName === CALCULATED_FIELD_TABLE) {
+    const calculatedField = calculatedFieldsById.get(field.columnName);
+    if (!calculatedField) throw new Error(`Champ calculé introuvable : ${field.columnName}`);
+    const { sql, bindings } = compileFormula(calculatedField.formula, calculatedField.dtype, null);
+    return knex.raw(sql, bindings);
+  }
+  return knex.raw('??', [`${field.tableName}.${field.columnName}`]);
+}
+
 /** Ignores a filter missing what it needs (no operator/value yet, or no second value for 'between') rather than erroring — lets a half-filled filter sit on the shelf without breaking the view. */
-function applyFilter(query: Knex.QueryBuilder, filter: FilterCondition): Knex.QueryBuilder {
-  const column = `${filter.tableName}.${filter.columnName}`;
+function applyFilter(query: Knex.QueryBuilder, filter: FilterCondition, columnSql: Knex.Raw): Knex.QueryBuilder {
   if (filter.value == null || filter.value === '') return query;
 
   switch (filter.operator) {
     case 'eq':
-      return query.where(column, '=', filter.value);
+      return query.where(columnSql, '=', filter.value);
     case 'neq':
-      return query.where(column, '!=', filter.value);
+      return query.where(columnSql, '!=', filter.value);
     case 'gt':
-      return query.where(column, '>', filter.value);
+      return query.where(columnSql, '>', filter.value);
     case 'gte':
-      return query.where(column, '>=', filter.value);
+      return query.where(columnSql, '>=', filter.value);
     case 'lt':
-      return query.where(column, '<', filter.value);
+      return query.where(columnSql, '<', filter.value);
     case 'lte':
-      return query.where(column, '<=', filter.value);
+      return query.where(columnSql, '<=', filter.value);
     case 'contains':
-      return query.whereILike(column, `%${filter.value}%`);
+      // whereILike's typings don't accept a Raw column (only whereBetween-style overloads do
+      // string/keyof) — .where(raw, operator, value) does, and 'ilike' is the same operator.
+      return query.where(columnSql, 'ilike', `%${filter.value}%`);
     case 'between':
-      return filter.value2 == null || filter.value2 === '' ? query : query.whereBetween(column, [filter.value, filter.value2]);
+      if (filter.value2 == null || filter.value2 === '') return query;
+      // Same reasoning: whereBetween has no Raw-accepting overload, so two inclusive comparisons instead.
+      return query.where(columnSql, '>=', filter.value).andWhere(columnSql, '<=', filter.value2);
     default:
       return query;
   }
@@ -67,6 +96,11 @@ function applyFilter(query: Knex.QueryBuilder, filter: FilterCondition): Knex.Qu
  * (before any grouping), and can reference a table not otherwise displayed — its table still
  * needs joining, so it's folded into the join-walk below alongside the displayed fields'.
  *
+ * A calculated field (tableName === CALCULATED_FIELD_TABLE) can sit on any shelf exactly like a
+ * real column — resolveFieldSql compiles its formula into the same position a plain identifier
+ * would go. Its formula's own real-table references (not the pseudo "_calc" table itself) join
+ * the same way a filter's table does.
+ *
  * SQL aliases are synthetic (col_0, col_1, ...), not "table.column" strings: knex's identifier
  * quoting (`??`) splits on '.' to address table.column pairs, so a "table.column"-shaped alias
  * gets silently mis-quoted into two separate identifiers instead of one — a real bug caught by
@@ -76,6 +110,7 @@ export async function buildViewDataQuery(
   knex: Knex,
   shelves: ShelfDefinition,
   relationIds: string[],
+  calculatedFields: CalculatedField[],
 ): Promise<{
   headers: string[];
   headerLabels: string[];
@@ -85,7 +120,9 @@ export async function buildViewDataQuery(
   const fields = dedupeFields([...shelves.rows, ...shelves.columns, ...shelves.color, ...shelves.size]);
   if (fields.length === 0) throw new Error('Cette vue ne contient aucun champ à afficher');
 
-  const tables = [...new Set([...fields, ...shelves.filters].map((f) => f.tableName))];
+  const calculatedFieldsById = new Map(calculatedFields.map((f) => [f.id, f]));
+
+  const tables = [...new Set([...fields, ...shelves.filters].flatMap((f) => realTablesFor(f, calculatedFieldsById)))];
   const relations: RelationRow[] = relationIds.length > 0 ? await knex('detected_relations').whereIn('id', relationIds) : [];
 
   let query = knex(tables[0]);
@@ -111,27 +148,40 @@ export async function buildViewDataQuery(
     remaining.splice(nextIndex, 1);
   }
 
-  for (const filter of shelves.filters) query = applyFilter(query, filter);
+  for (const filter of shelves.filters) query = applyFilter(query, filter, resolveFieldSql(knex, filter, calculatedFieldsById));
+
+  const realFields = fields.filter((f) => f.tableName !== CALCULATED_FIELD_TABLE);
+  const labelsMap = await getLabelsMap(knex, realFields);
 
   const headers = fields.map((f) => `${f.tableName}.${f.columnName}`);
-  const labelsMap = await getLabelsMap(knex, fields);
-  const headerLabels = fields.map((f) => labelsMap.get(`${f.tableName}.${f.columnName}`) ?? f.columnName);
+  const headerLabels = fields.map((f) =>
+    f.tableName === CALCULATED_FIELD_TABLE
+      ? (calculatedFieldsById.get(f.columnName)?.label ?? f.columnName)
+      : (labelsMap.get(`${f.tableName}.${f.columnName}`) ?? f.columnName),
+  );
   const aliases = fields.map((_, i) => `col_${i}`);
   const dimensionFields = fields.filter((f) => !f.aggregation);
   const measureFields = fields.filter((f) => f.aggregation);
 
   if (measureFields.length === 0) {
-    const selectExpr = fields.map((f, i) => knex.raw('?? as ??', [`${f.tableName}.${f.columnName}`, aliases[i]]));
+    const selectExpr = fields.map((f, i) => knex.raw('? as ??', [resolveFieldSql(knex, f, calculatedFieldsById), aliases[i]]));
     query = query.select(selectExpr);
   } else {
-    const selectExpr = fields.map((f, i) =>
-      f.aggregation
-        ? knex.raw(`${SQL_AGGREGATE[f.aggregation]}(??) as ??`, [`${f.tableName}.${f.columnName}`, aliases[i]])
-        : knex.raw('?? as ??', [`${f.tableName}.${f.columnName}`, aliases[i]]),
-    );
+    const selectExpr = fields.map((f, i) => {
+      const source = resolveFieldSql(knex, f, calculatedFieldsById);
+      return f.aggregation ? knex.raw(`${SQL_AGGREGATE[f.aggregation]}(?) as ??`, [source, aliases[i]]) : knex.raw('? as ??', [source, aliases[i]]);
+    });
     query = query.select(selectExpr);
     if (dimensionFields.length > 0) {
-      query = query.groupBy(dimensionFields.map((f) => `${f.tableName}.${f.columnName}`));
+      // Group by the SELECT list's own aliases, not a second copy of the same expression: a
+      // recompiled calculated-field formula gets fresh parameter placeholders each time
+      // (resolveFieldSql runs again), and Postgres treats two differently-parameterized copies
+      // of an otherwise-identical CASE expression as unrelated for GROUP BY validity — "column
+      // ... must appear in the GROUP BY clause" even though the text looks the same. Postgres
+      // (as an extension beyond standard SQL) allows GROUP BY to reference a SELECT-list alias
+      // directly, which reuses the exact same parsed expression instead of a second one.
+      const dimensionAliases = fields.flatMap((f, i) => (f.aggregation ? [] : [aliases[i]]));
+      query = query.groupBy(dimensionAliases);
     }
   }
 

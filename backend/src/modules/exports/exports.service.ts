@@ -23,7 +23,7 @@ export class ExportsService {
     const view = await this.knex('views').where({ id: viewId }).first();
     if (!view) throw new NotFoundException(`View ${viewId} not found`);
 
-    const { headers, headerLabels, query, mapRow } = await buildViewDataQuery(this.knex, view.shelves, view.relation_ids);
+    const { headers, headerLabels, query, mapRow } = await buildViewDataQuery(this.knex, view.shelves, view.relation_ids, view.calculated_fields);
     const rows = relabelRows((await query).map(mapRow), headers, headerLabels);
 
     const html = buildPrintableHtml(view.name, headerLabels, rows);
@@ -41,7 +41,7 @@ export class ExportsService {
     const view = await this.knex('views').where({ id: viewId }).first();
     if (!view) throw new NotFoundException(`View ${viewId} not found`);
 
-    const { headers, headerLabels, query, mapRow } = await buildViewDataQuery(this.knex, view.shelves, view.relation_ids);
+    const { headers, headerLabels, query, mapRow } = await buildViewDataQuery(this.knex, view.shelves, view.relation_ids, view.calculated_fields);
     const rows = relabelRows((await query).map(mapRow), headers, headerLabels);
 
     const worksheet = XLSX.utils.json_to_sheet(rows, { header: headerLabels });

@@ -1,6 +1,8 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../../database/database.constants';
+import { ColumnProfilerService } from '../relations/column-profiler.service';
+import { collectFieldRefs, FormulaError, parseFormula, type FormulaDtype } from './formula';
 import { buildViewDataQuery } from './view-query-builder';
 
 export type ChartType = 'bar' | 'line' | 'scatter' | 'heatmap' | 'table' | 'geo';
@@ -35,12 +37,28 @@ export interface ShelfDefinition {
   filters: FilterCondition[];
 }
 
+/**
+ * A field derived from a formula rather than stored directly — addressed on shelves the same way
+ * as a real column, via a synthetic tableName ('_calc') and columnName (this field's id), so it's
+ * a drop-in "field" everywhere a FieldRef is accepted. Cannot reference another calculated field
+ * (see formula.ts) — that rules out cycles by construction, not by detection.
+ */
+export interface CalculatedField {
+  id: string;
+  label: string;
+  formula: string;
+  dtype: FormulaDtype;
+}
+
+export const CALCULATED_FIELD_TABLE = '_calc';
+
 export interface SavedView {
   id: string;
   ownerId: string;
   name: string;
   chartType: ChartType;
   shelves: ShelfDefinition;
+  calculatedFields: CalculatedField[];
   visibility: ViewVisibility;
   sharedWithGroupId: string | null;
   relationStatus: ViewRelationStatus;
@@ -51,6 +69,7 @@ export interface CreateViewInput {
   name: string;
   chartType: ChartType;
   shelves: ShelfDefinition;
+  calculatedFields: CalculatedField[];
 }
 
 interface ViewRow {
@@ -59,6 +78,7 @@ interface ViewRow {
   name: string;
   chart_type: ChartType;
   shelves: ShelfDefinition;
+  calculated_fields: CalculatedField[];
   tables_used: string[];
   relation_ids: string[];
   visibility: ViewVisibility;
@@ -68,10 +88,15 @@ interface ViewRow {
 
 @Injectable()
 export class ViewsService {
-  constructor(@Inject(KNEX_CONNECTION) private readonly knex: Knex) {}
+  constructor(
+    @Inject(KNEX_CONNECTION) private readonly knex: Knex,
+    private readonly columnProfiler: ColumnProfilerService,
+  ) {}
 
   async create(ownerId: string, input: CreateViewInput): Promise<SavedView> {
-    const tablesUsed = extractTablesUsed(input.shelves);
+    const calculatedFields = input.calculatedFields ?? [];
+    const calculatedFieldTables = await this.validateCalculatedFields(calculatedFields);
+    const tablesUsed = [...new Set([...extractTablesUsed(input.shelves), ...calculatedFieldTables])];
     const relationIds = await this.pinRelationsForTablePairs(tablesUsed);
 
     const [row]: ViewRow[] = await this.knex('views')
@@ -80,6 +105,7 @@ export class ViewsService {
         name: input.name,
         chart_type: input.chartType,
         shelves: JSON.stringify(input.shelves),
+        calculated_fields: JSON.stringify(calculatedFields),
         tables_used: JSON.stringify(tablesUsed),
         relation_ids: JSON.stringify(relationIds),
         visibility: 'private',
@@ -95,7 +121,9 @@ export class ViewsService {
     if (!existing) throw new NotFoundException(`View ${viewId} not found`);
     if (existing.owner_id !== ownerId) throw new ForbiddenException("Vous n'êtes pas propriétaire de cette vue");
 
-    const tablesUsed = extractTablesUsed(input.shelves);
+    const calculatedFields = input.calculatedFields ?? [];
+    const calculatedFieldTables = await this.validateCalculatedFields(calculatedFields);
+    const tablesUsed = [...new Set([...extractTablesUsed(input.shelves), ...calculatedFieldTables])];
     const relationIds = await this.pinRelationsForTablePairs(tablesUsed);
 
     const [row]: ViewRow[] = await this.knex('views')
@@ -104,12 +132,38 @@ export class ViewsService {
         name: input.name,
         chart_type: input.chartType,
         shelves: JSON.stringify(input.shelves),
+        calculated_fields: JSON.stringify(calculatedFields),
         tables_used: JSON.stringify(tablesUsed),
         relation_ids: JSON.stringify(relationIds),
         updated_at: new Date(),
       })
       .returning('*');
     return this.toDomain(row);
+  }
+
+  /**
+   * Compiles every calculated field against the real available fields (not just the tables
+   * already on shelves — a formula can reference a table nothing else in the view displays yet),
+   * rejecting the save with a clear message if any formula is invalid. Returns the set of tables
+   * the formulas touch, so their relations get pinned too (see create/update above).
+   */
+  private async validateCalculatedFields(calculatedFields: CalculatedField[]): Promise<string[]> {
+    if (calculatedFields.length === 0) return [];
+
+    const schemas = await this.columnProfiler.listTableSchemas();
+    const availableFields = schemas.flatMap((table) => table.columns.map((column) => ({ tableName: table.tableName, columnName: column.columnName })));
+
+    const tables = new Set<string>();
+    for (const field of calculatedFields) {
+      try {
+        const ast = parseFormula(field.formula, availableFields);
+        for (const ref of collectFieldRefs(ast)) tables.add(ref.tableName);
+      } catch (error) {
+        const message = error instanceof FormulaError ? error.message : 'Erreur inconnue';
+        throw new BadRequestException(`Champ calculé "${field.label}" invalide : ${message}`);
+      }
+    }
+    return [...tables];
   }
 
   async getById(viewId: string): Promise<SavedView> {
@@ -137,7 +191,7 @@ export class ViewsService {
     const row: ViewRow | undefined = await this.knex('views').where({ id: viewId }).first();
     if (!row) throw new NotFoundException(`View ${viewId} not found`);
 
-    const { headers, headerLabels, query, mapRow } = await buildViewDataQuery(this.knex, row.shelves, row.relation_ids);
+    const { headers, headerLabels, query, mapRow } = await buildViewDataQuery(this.knex, row.shelves, row.relation_ids, row.calculated_fields);
     const rows = await query;
     return { headers, headerLabels, rows: rows.map(mapRow) };
   }
@@ -198,6 +252,7 @@ export class ViewsService {
       name: row.name,
       chartType: row.chart_type,
       shelves: row.shelves,
+      calculatedFields: row.calculated_fields,
       visibility: row.visibility,
       sharedWithGroupId: row.shared_with_group_id,
       relationStatus: await this.computeRelationStatus(row.tables_used, row.relation_ids),

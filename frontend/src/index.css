@@ -745,6 +745,42 @@ tbody tr:hover {
   gap: 12px;
 }
 
+.calculated-field-form {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.calculated-field-form h3 {
+  margin-top: 0;
+}
+
+.calculated-field-form textarea {
+  width: 100%;
+  max-width: 100%;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+}
+
+.calculated-field-form fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.calculated-field-form fieldset button {
+  font-size: 12px;
+  padding: 4px 8px;
+  margin: 0;
+}
+
+.calculated-field-form p {
+  font-size: 12px;
+  color: var(--ink-secondary);
+}
+
 .shelf-drop-zone {
   min-height: 60px;
   transition: border-color 0.15s, background 0.15s;

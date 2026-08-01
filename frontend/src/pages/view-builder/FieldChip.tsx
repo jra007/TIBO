@@ -1,16 +1,20 @@
 import { useDraggable } from '@dnd-kit/core';
 import { useEffect, useRef, useState } from 'react';
+import { CALCULATED_FIELD_TABLE } from '../../api/types';
 import { displayLabel, SHELVES, type Field, type ShelfId } from './shelves';
 
 export function FieldChip({
   field,
   onAddToShelf,
   onRename,
+  onEditCalculatedField,
 }: {
   field: Field;
   onAddToShelf: (shelfId: ShelfId) => void;
   onRename: (field: Field, newLabel: string) => void;
+  onEditCalculatedField: (field: Field) => void;
 }) {
+  const isCalculated = field.tableName === CALCULATED_FIELD_TABLE;
   const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: field.id, data: { field } });
   const [renaming, setRenaming] = useState(false);
   const [draftLabel, setDraftLabel] = useState(displayLabel(field));
@@ -56,22 +60,21 @@ export function FieldChip({
           {displayLabel(field)}{' '}
           <button
             type="button"
-            aria-label={`Renommer ${field.tableName}.${field.columnName}`}
+            aria-label={isCalculated ? `Modifier le champ calculé ${displayLabel(field)}` : `Renommer ${field.tableName}.${field.columnName}`}
             // dnd-kit's drag listeners are on the wrapping div and intercept pointerdown on any
             // child before its click ever fires — stop it here so the button behaves normally.
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
-              startRenaming();
+              if (isCalculated) onEditCalculatedField(field);
+              else startRenaming();
             }}
           >
             ✎
           </button>
         </span>
       )}
-      <small>
-        {field.tableName}.{field.columnName}
-      </small>
+      <small>{isCalculated ? 'Champ calculé' : `${field.tableName}.${field.columnName}`}</small>
       {/* Keyboard/screen-reader alternative to drag-and-drop, per WCAG 2.1 AA requirement */}
       <label>
         Ajouter à

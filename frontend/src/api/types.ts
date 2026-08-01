@@ -73,6 +73,18 @@ export interface ShelfDefinition {
   filters: FilterCondition[];
 }
 
+export type FormulaDtype = 'text' | 'numeric' | 'date' | 'boolean';
+
+/** A field derived from a formula (see the view builder's "Champs calculés") — addressed on shelves via tableName '_calc' and columnName = this id. */
+export interface CalculatedField {
+  id: string;
+  label: string;
+  formula: string;
+  dtype: FormulaDtype;
+}
+
+export const CALCULATED_FIELD_TABLE = '_calc';
+
 export interface ViewData {
   headers: string[];
   headerLabels: string[];
@@ -85,6 +97,7 @@ export interface SavedView {
   name: string;
   chartType: ChartType;
   shelves: ShelfDefinition;
+  calculatedFields: CalculatedField[];
   visibility: ViewVisibility;
   sharedWithGroupId: string | null;
   relationStatus: ViewRelationStatus;

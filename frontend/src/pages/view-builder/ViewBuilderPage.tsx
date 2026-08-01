@@ -2,7 +2,8 @@ import { DndContext, type DragEndEvent } from '@dnd-kit/core';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { apiClient } from '../../api/client';
-import type { FilterCondition, SavedView, TableSchema } from '../../api/types';
+import { CALCULATED_FIELD_TABLE, type CalculatedField, type FilterCondition, type SavedView, type TableSchema } from '../../api/types';
+import { CalculatedFieldEditor } from './CalculatedFieldEditor';
 import { FieldChip } from './FieldChip';
 import { ShelfDropZone } from './ShelfDropZone';
 import {
@@ -28,6 +29,16 @@ function schemasToFields(schemas: TableSchema[]): Field[] {
       label: column.label,
     })),
   );
+}
+
+function calculatedFieldToField(calculatedField: CalculatedField): Field {
+  return {
+    id: `${CALCULATED_FIELD_TABLE}.${calculatedField.id}`,
+    tableName: CALCULATED_FIELD_TABLE,
+    columnName: calculatedField.id,
+    dtype: calculatedField.dtype,
+    label: calculatedField.label,
+  };
 }
 
 function fieldRefToField(ref: { tableName: string; columnName: string; aggregation?: Aggregation }, availableFields: Field[]): Field {
@@ -58,7 +69,9 @@ export function ViewBuilderPage() {
   const { id } = useParams<{ id: string }>();
   const isEditing = Boolean(id);
   const navigate = useNavigate();
-  const [availableFields, setAvailableFields] = useState<Field[]>([]);
+  const [schemaFields, setSchemaFields] = useState<Field[]>([]);
+  const [calculatedFields, setCalculatedFields] = useState<CalculatedField[]>([]);
+  const [editingCalculatedField, setEditingCalculatedField] = useState<'new' | CalculatedField | null>(null);
   const [fieldSearch, setFieldSearch] = useState('');
   const [shelves, setShelves] = useState<ShelfAssignment>(emptyShelfAssignment);
   const [manualChartType, setManualChartType] = useState<ChartType | null>(null);
@@ -70,33 +83,39 @@ export function ViewBuilderPage() {
   useEffect(() => {
     apiClient
       .get<TableSchema[]>('/ingestion/tables')
-      .then((schemas) => setAvailableFields(schemasToFields(schemas)))
+      .then((schemas) => setSchemaFields(schemasToFields(schemas)))
       .catch(() => setError("Impossible de charger les champs. Importez d'abord des fichiers."));
   }, []);
 
   useEffect(() => {
-    if (!id || availableFields.length === 0) return;
+    if (!id || schemaFields.length === 0) return;
     apiClient
       .get<SavedView>(`/views/${id}`)
       .then((view) => {
         setName(view.name);
         setManualChartType(view.chartType);
+        setCalculatedFields(view.calculatedFields);
+        const combinedFields = [...schemaFields, ...view.calculatedFields.map(calculatedFieldToField)];
         setShelves({
-          rows: view.shelves.rows.map((f) => fieldRefToField(f, availableFields)),
-          columns: view.shelves.columns.map((f) => fieldRefToField(f, availableFields)),
-          color: view.shelves.color.map((f) => fieldRefToField(f, availableFields)),
-          size: view.shelves.size.map((f) => fieldRefToField(f, availableFields)),
-          filters: view.shelves.filters.map((f) => filterConditionToField(f, availableFields)),
+          rows: view.shelves.rows.map((f) => fieldRefToField(f, combinedFields)),
+          columns: view.shelves.columns.map((f) => fieldRefToField(f, combinedFields)),
+          color: view.shelves.color.map((f) => fieldRefToField(f, combinedFields)),
+          size: view.shelves.size.map((f) => fieldRefToField(f, combinedFields)),
+          filters: view.shelves.filters.map((f) => filterConditionToField(f, combinedFields)),
         });
       })
       .catch(() => setError('Impossible de charger cette vue.'))
       .finally(() => setLoadingExisting(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, availableFields.length]);
+  }, [id, schemaFields.length]);
 
   const suggestedChartType = useMemo(() => suggestChartType(shelves), [shelves]);
   const activeChartType = manualChartType ?? suggestedChartType;
 
+  const availableFields = useMemo(
+    () => [...schemaFields, ...calculatedFields.map(calculatedFieldToField)],
+    [schemaFields, calculatedFields],
+  );
   const fieldById = useMemo(() => Object.fromEntries(availableFields.map((f) => [f.id, f])), [availableFields]);
   const assignedFieldIds = useMemo(() => new Set(Object.values(shelves).flat().map((f) => f.id)), [shelves]);
   const hasAnyField = Object.values(shelves).some((fields) => fields.length > 0);
@@ -143,7 +162,7 @@ export function ViewBuilderPage() {
   async function handleRename(field: Field, newLabel: string) {
     try {
       await apiClient.put(`/ingestion/tables/${field.tableName}/columns/${field.columnName}/label`, { label: newLabel });
-      setAvailableFields((prev) => prev.map((f) => (f.id === field.id ? { ...f, label: newLabel } : f)));
+      setSchemaFields((prev) => prev.map((f) => (f.id === field.id ? { ...f, label: newLabel } : f)));
       setShelves((prev) => {
         const updated = { ...prev };
         for (const shelfId of Object.keys(updated) as ShelfId[]) {
@@ -154,6 +173,38 @@ export function ViewBuilderPage() {
     } catch {
       setError('Échec du renommage du champ.');
     }
+  }
+
+  function handleEditCalculatedField(field: Field) {
+    const existing = calculatedFields.find((f) => f.id === field.columnName);
+    if (existing) setEditingCalculatedField(existing);
+  }
+
+  function handleSaveCalculatedField(field: CalculatedField) {
+    setCalculatedFields((prev) => (prev.some((f) => f.id === field.id) ? prev.map((f) => (f.id === field.id ? field : f)) : [...prev, field]));
+    // The label may have changed — keep any shelf placements of this field in sync.
+    setShelves((prev) => {
+      const updated = { ...prev };
+      for (const shelfId of Object.keys(updated) as ShelfId[]) {
+        updated[shelfId] = updated[shelfId].map((f) =>
+          f.tableName === CALCULATED_FIELD_TABLE && f.columnName === field.id ? { ...f, label: field.label, dtype: field.dtype } : f,
+        );
+      }
+      return updated;
+    });
+    setEditingCalculatedField(null);
+  }
+
+  function handleDeleteCalculatedField(fieldId: string) {
+    setCalculatedFields((prev) => prev.filter((f) => f.id !== fieldId));
+    setShelves((prev) => {
+      const updated = { ...prev };
+      for (const shelfId of Object.keys(updated) as ShelfId[]) {
+        updated[shelfId] = updated[shelfId].filter((f) => !(f.tableName === CALCULATED_FIELD_TABLE && f.columnName === fieldId));
+      }
+      return updated;
+    });
+    setEditingCalculatedField(null);
   }
 
   function handleDragEnd(event: DragEndEvent) {
@@ -185,6 +236,7 @@ export function ViewBuilderPage() {
           size: stripId(shelves.size),
           filters: stripFilterId(shelves.filters),
         },
+        calculatedFields,
       };
       if (isEditing) {
         await apiClient.put(`/views/${id}`, payload);
@@ -193,8 +245,8 @@ export function ViewBuilderPage() {
         await apiClient.post('/views', payload);
         navigate('/views');
       }
-    } catch {
-      setError('Échec de la sauvegarde de la vue.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Échec de la sauvegarde de la vue.');
     } finally {
       setSaving(false);
     }
@@ -237,8 +289,31 @@ export function ViewBuilderPage() {
               value={fieldSearch}
               onChange={(e) => setFieldSearch(e.target.value)}
             />
+
+            <div className="page-actions">
+              <button type="button" className="secondary" onClick={() => setEditingCalculatedField('new')}>
+                + Champ calculé
+              </button>
+            </div>
+
+            {editingCalculatedField && (
+              <CalculatedFieldEditor
+                availableFields={schemaFields}
+                editing={editingCalculatedField === 'new' ? null : editingCalculatedField}
+                onSave={handleSaveCalculatedField}
+                onDelete={handleDeleteCalculatedField}
+                onCancel={() => setEditingCalculatedField(null)}
+              />
+            )}
+
             {visibleFields.map((field) => (
-              <FieldChip key={field.id} field={fieldById[field.id]} onAddToShelf={(shelfId) => assignToShelf(field, shelfId)} onRename={handleRename} />
+              <FieldChip
+                key={field.id}
+                field={fieldById[field.id]}
+                onAddToShelf={(shelfId) => assignToShelf(field, shelfId)}
+                onRename={handleRename}
+                onEditCalculatedField={handleEditCalculatedField}
+              />
             ))}
             {fieldSearch && visibleFields.length === 0 && <p>Aucun champ ne correspond à « {fieldSearch} ».</p>}
           </aside>

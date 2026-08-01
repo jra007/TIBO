@@ -14,6 +14,19 @@ function handleUnauthorized(response: Response) {
   }
 }
 
+/** Nest's default error body is {statusCode, message, error} — message can be a string or (class-validator) a string[]. Falls back to a generic message if the body isn't JSON or doesn't match. */
+async function extractErrorMessage(response: Response, path: string): Promise<string> {
+  try {
+    const body: unknown = await response.clone().json();
+    const message = (body as { message?: string | string[] })?.message;
+    if (typeof message === 'string') return message;
+    if (Array.isArray(message)) return message.join(', ');
+  } catch {
+    // not JSON, fall through
+  }
+  return `Request failed: ${response.status} ${path}`;
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`, {
     credentials: 'include',
@@ -22,7 +35,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     handleUnauthorized(response);
-    throw new Error(`Request failed: ${response.status} ${path}`);
+    throw new Error(await extractErrorMessage(response, path));
   }
   return response.json() as Promise<T>;
 }
