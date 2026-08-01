@@ -14,6 +14,7 @@ const PERMISSION_LABELS: Record<Permission, string> = {
   'settings:rbac:edit': 'Gérer les rôles et permissions',
   'settings:reset:execute': 'Réinitialiser toutes les données',
   'ingestion:manage': "Supprimer l'historique d'ingestion",
+  'settings:appearance:edit': "Modifier l'apparence",
 };
 
 export function RbacPage() {

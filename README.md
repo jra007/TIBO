@@ -69,6 +69,9 @@ que la page se charge normalement.
 MVP fonctionnel : ingestion réelle, détection et validation des relations, constructeur de vues
 (drag-and-drop, agrégations, graphiques), tableaux de bord, partage par groupe, exports Excel/PDF,
 authentification locale et RBAC réellement appliqués, rétention avec journal d'audit, écrans
-d'administration. LDAP/SMTP présents mais volontairement inactifs (phase 2, cf. spécification).
+d'administration. Authentification LDAP (bind de service + recherche + vérification du mot de
+passe), SMTP (envoi réel via nodemailer, avec email de test) et apparence (logo, favicon, titre,
+couleur des boutons et du fond, appliqués immédiatement dans toute l'application y compris sur
+l'écran de connexion) sont réellement actifs, pas seulement des écrans de configuration.
 Reste ouvert : masquage des colonnes sensibles et durées légales de rétention confirmées (décisions
-métier/juridiques, cf. section 10 de la spécification), activation effective de la phase 2.
+métier/juridiques, cf. section 10 de la spécification), SSO/OIDC (non prévu à ce stade).

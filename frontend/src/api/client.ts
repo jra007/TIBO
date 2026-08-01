@@ -57,6 +57,11 @@ async function downloadFile(path: string, filename: string): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
+/** Resolves a backend-relative path (e.g. an uploaded file's /uploads/{id}) against the API origin — the frontend and backend are served from separate origins. */
+export function resolveApiUrl(path: string): string {
+  return `${BASE_URL}${path}`;
+}
+
 export const apiClient = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) => request<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),

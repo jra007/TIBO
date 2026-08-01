@@ -11,6 +11,7 @@ export function AdminLayout() {
         <NavLink to="/admin/rbac">Permissions</NavLink>
         <NavLink to="/admin/auth">Authentification</NavLink>
         <NavLink to="/admin/smtp">SMTP</NavLink>
+        <NavLink to="/admin/appearance">Apparence</NavLink>
         <NavLink to="/admin/reset">Réinitialisation</NavLink>
       </nav>
       <div>

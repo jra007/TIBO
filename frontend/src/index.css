@@ -175,6 +175,20 @@ a:hover {
   font-size: 13px;
 }
 
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.app-brand img {
+  height: 24px;
+  max-width: 96px;
+  object-fit: contain;
+}
+
 .app-layout > main {
   flex: 1;
   width: 100%;
@@ -234,8 +248,9 @@ a:hover {
   margin: 0;
 }
 
-/* An <a>/<Link> styled to read as a button, e.g. "Créer une vue" */
-a.button {
+/* An <a>/<Link>/<label> styled to read as a button, e.g. "Créer une vue" or a hidden file input's trigger */
+a.button,
+label.button {
   display: inline-block;
   color: var(--accent-ink);
   background: var(--accent);
@@ -244,11 +259,55 @@ a.button {
   font-weight: 600;
   font-size: 14px;
   text-decoration: none;
+  cursor: pointer;
 }
 
-a.button:hover {
+a.button:hover,
+label.button:hover {
   background: var(--accent-hover);
   text-decoration: none;
+}
+
+/* ---------- Appearance ---------- */
+
+.appearance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.appearance-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.appearance-card h3 {
+  margin-top: 0;
+}
+
+.appearance-preview {
+  width: 96px;
+  height: 96px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.appearance-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.appearance-preview-empty {
+  color: var(--ink-muted);
+  font-size: 12px;
 }
 
 /* ---------- Login ---------- */
@@ -270,6 +329,13 @@ a.button:hover {
   text-align: center;
   font-size: 20px;
   margin-bottom: 20px;
+}
+
+.login-logo {
+  display: block;
+  max-width: 120px;
+  max-height: 64px;
+  margin: 0 auto 12px;
 }
 
 .login-page form {

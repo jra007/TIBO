@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from '../../api/client';
-import type { AdminUser, AuthSettings } from '../../api/types';
+import type { AdminUser, AuthSettings, LdapTestResult, UpdateAuthSettingsInput } from '../../api/types';
+
+function toMsInput(value: number | null): string {
+  return value === null ? '' : String(value);
+}
+
+function fromMsInput(value: string): number | null {
+  return value === '' ? null : Number(value);
+}
 
 export function AuthSettingsPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -8,12 +16,23 @@ export function AuthSettingsPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const [activeMode, setActiveMode] = useState<AuthSettings['activeMode']>('local');
-  const [ldapServerUrl, setLdapServerUrl] = useState('');
-  const [ldapBaseDn, setLdapBaseDn] = useState('');
-  const [ldapAttributeMappingJson, setLdapAttributeMappingJson] = useState('{}');
-  const [ldapError, setLdapError] = useState<string | null>(null);
+  const [enabled, setEnabled] = useState(false);
+  const [url, setUrl] = useState('');
+  const [bindDn, setBindDn] = useState('');
+  const [bindPassword, setBindPassword] = useState('');
+  const [hasBindPassword, setHasBindPassword] = useState(false);
+  const [baseDn, setBaseDn] = useState('');
+  const [searchFilter, setSearchFilter] = useState('');
+  const [usernameAttribute, setUsernameAttribute] = useState('uid');
+  const [tlsRejectUnauthorized, setTlsRejectUnauthorized] = useState(true);
+  const [connectTimeoutMs, setConnectTimeoutMs] = useState('');
+  const [timeoutMs, setTimeoutMs] = useState('');
   const [savingLdap, setSavingLdap] = useState(false);
+
+  const [testUsername, setTestUsername] = useState('');
+  const [testPassword, setTestPassword] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<LdapTestResult | null>(null);
 
   async function refresh() {
     try {
@@ -25,10 +44,17 @@ export function AuthSettingsPage() {
 
   async function refreshAuthSettings() {
     const settings = await apiClient.get<AuthSettings>('/admin/settings/auth');
-    setActiveMode(settings.activeMode);
-    setLdapServerUrl(settings.ldap.serverUrl);
-    setLdapBaseDn(settings.ldap.baseDn);
-    setLdapAttributeMappingJson(JSON.stringify(settings.ldap.attributeMapping, null, 2));
+    setEnabled(settings.ldap.enabled);
+    setUrl(settings.ldap.url);
+    setBindDn(settings.ldap.bindDn);
+    setHasBindPassword(settings.ldap.hasBindPassword);
+    setBindPassword('');
+    setBaseDn(settings.ldap.baseDn);
+    setSearchFilter(settings.ldap.searchFilter);
+    setUsernameAttribute(settings.ldap.usernameAttribute);
+    setTlsRejectUnauthorized(settings.ldap.tlsRejectUnauthorized);
+    setConnectTimeoutMs(toMsInput(settings.ldap.connectTimeoutMs));
+    setTimeoutMs(toMsInput(settings.ldap.timeoutMs));
   }
 
   useEffect(() => {
@@ -46,23 +72,42 @@ export function AuthSettingsPage() {
 
   async function handleSaveLdap(event: React.FormEvent) {
     event.preventDefault();
-    setLdapError(null);
-    let attributeMapping: Record<string, string>;
-    try {
-      attributeMapping = JSON.parse(ldapAttributeMappingJson);
-    } catch {
-      setLdapError('Le mapping des attributs doit être un JSON valide.');
-      return;
-    }
     setSavingLdap(true);
     try {
-      await apiClient.put('/admin/settings/auth', {
-        activeMode,
-        ldap: { serverUrl: ldapServerUrl, baseDn: ldapBaseDn, attributeMapping },
-      });
+      const body: UpdateAuthSettingsInput = {
+        ldap: {
+          enabled,
+          url,
+          bindDn,
+          baseDn,
+          searchFilter,
+          usernameAttribute,
+          tlsRejectUnauthorized,
+          connectTimeoutMs: fromMsInput(connectTimeoutMs),
+          timeoutMs: fromMsInput(timeoutMs),
+        },
+      };
+      if (bindPassword !== '') body.ldap.bindPassword = bindPassword;
+      await apiClient.put('/admin/settings/auth', body);
       await refreshAuthSettings();
     } finally {
       setSavingLdap(false);
+    }
+  }
+
+  async function handleTest(event: React.FormEvent) {
+    event.preventDefault();
+    setTesting(true);
+    setTestResult(null);
+    try {
+      setTestResult(
+        await apiClient.post<LdapTestResult>('/admin/settings/auth/ldap/test', {
+          testUsername: testUsername || undefined,
+          testPassword: testPassword || undefined,
+        }),
+      );
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -77,30 +122,65 @@ export function AuthSettingsPage() {
       )}
 
       <form onSubmit={handleSaveLdap}>
-        <h3>Mode d'authentification</h3>
-        <p>
-          Le mode LDAP peut être configuré et enregistré dès maintenant, mais reste sans effet tant que la phase 2 n'est pas
-          livrée — les comptes locaux restent actifs quel que soit ce réglage.
-        </p>
-        <label htmlFor="active-mode">Mode actif</label>
-        <select id="active-mode" value={activeMode} onChange={(e) => setActiveMode(e.target.value as AuthSettings['activeMode'])}>
-          <option value="local">Local</option>
-          <option value="ldap">LDAP</option>
-        </select>
-        <label htmlFor="ldap-server">Serveur LDAP</label>
-        <input id="ldap-server" value={ldapServerUrl} onChange={(e) => setLdapServerUrl(e.target.value)} placeholder="ldap://..." />
+        <h3>LDAP</h3>
+        <p>La connexion locale (identifiant + mot de passe) reste toujours disponible. LDAP est une option supplémentaire, activable indépendamment.</p>
+        <label>
+          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+          Activer la connexion LDAP
+        </label>
+        <label htmlFor="ldap-url">URL du serveur</label>
+        <input id="ldap-url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="ldaps://ldap.exemple.com:636" />
+        <label htmlFor="ldap-bind-dn">Bind DN (compte de service)</label>
+        <input id="ldap-bind-dn" value={bindDn} onChange={(e) => setBindDn(e.target.value)} placeholder="cn=service,dc=exemple,dc=com" />
+        <label htmlFor="ldap-bind-password">Mot de passe du compte de service</label>
+        <input
+          id="ldap-bind-password"
+          type="password"
+          value={bindPassword}
+          onChange={(e) => setBindPassword(e.target.value)}
+          placeholder={hasBindPassword ? 'Laisser vide pour ne pas changer' : ''}
+          autoComplete="new-password"
+        />
         <label htmlFor="ldap-base-dn">Base DN</label>
-        <input id="ldap-base-dn" value={ldapBaseDn} onChange={(e) => setLdapBaseDn(e.target.value)} placeholder="dc=example,dc=com" />
-        <label htmlFor="ldap-mapping">Mapping des attributs (JSON)</label>
-        <textarea id="ldap-mapping" value={ldapAttributeMappingJson} onChange={(e) => setLdapAttributeMappingJson(e.target.value)} rows={5} />
-        {ldapError && (
-          <p role="alert" className="error">
-            {ldapError}
-          </p>
-        )}
+        <input id="ldap-base-dn" value={baseDn} onChange={(e) => setBaseDn(e.target.value)} placeholder="dc=exemple,dc=com" />
+        <label htmlFor="ldap-search-filter">Filtre de recherche</label>
+        <input id="ldap-search-filter" value={searchFilter} onChange={(e) => setSearchFilter(e.target.value)} placeholder="(uid={{username}})" />
+        <label htmlFor="ldap-username-attribute">Attribut identifiant</label>
+        <input id="ldap-username-attribute" value={usernameAttribute} onChange={(e) => setUsernameAttribute(e.target.value)} placeholder="uid" />
+        <label>
+          <input type="checkbox" checked={tlsRejectUnauthorized} onChange={(e) => setTlsRejectUnauthorized(e.target.checked)} />
+          Vérifier le certificat TLS
+        </label>
+
+        <fieldset>
+          <legend>Délais d'attente (optionnel, en millisecondes)</legend>
+          <label htmlFor="ldap-connect-timeout">Connexion</label>
+          <input id="ldap-connect-timeout" type="number" value={connectTimeoutMs} onChange={(e) => setConnectTimeoutMs(e.target.value)} />
+          <label htmlFor="ldap-timeout">Opération</label>
+          <input id="ldap-timeout" type="number" value={timeoutMs} onChange={(e) => setTimeoutMs(e.target.value)} />
+        </fieldset>
+
         <button type="submit" disabled={savingLdap}>
           Enregistrer
         </button>
+      </form>
+
+      <form onSubmit={handleTest}>
+        <h3>Tester la connexion</h3>
+        <label htmlFor="ldap-test-username">Identifiant de test (optionnel)</label>
+        <input id="ldap-test-username" value={testUsername} onChange={(e) => setTestUsername(e.target.value)} />
+        <label htmlFor="ldap-test-password">Mot de passe de test (optionnel)</label>
+        <input id="ldap-test-password" type="password" value={testPassword} onChange={(e) => setTestPassword(e.target.value)} />
+        <button type="submit" disabled={testing}>
+          {testing ? 'Test en cours…' : 'Tester la connexion'}
+        </button>
+        {testResult && (
+          <output>
+            <p className={testResult.success ? undefined : 'error'} role={testResult.success ? undefined : 'alert'}>
+              {testResult.message}
+            </p>
+          </output>
+        )}
       </form>
 
       <form onSubmit={handleCreate}>

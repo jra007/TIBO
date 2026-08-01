@@ -124,6 +124,7 @@ export const PERMISSIONS = [
   'settings:rbac:edit',
   'settings:reset:execute',
   'ingestion:manage',
+  'settings:appearance:edit',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -138,18 +139,82 @@ export interface RetentionPolicy {
   status: RetentionStatus;
 }
 
+export interface LdapSettings {
+  enabled: boolean;
+  url: string;
+  bindDn: string;
+  hasBindPassword: boolean;
+  baseDn: string;
+  searchFilter: string;
+  usernameAttribute: string;
+  tlsRejectUnauthorized: boolean;
+  connectTimeoutMs: number | null;
+  timeoutMs: number | null;
+}
+
 export interface AuthSettings {
-  activeMode: 'local' | 'ldap';
-  ldap: {
-    serverUrl: string;
-    baseDn: string;
-    attributeMapping: Record<string, string>;
-  };
+  ldap: LdapSettings;
+}
+
+/** ldap.bindPassword: omit = leave unchanged, '' = clear, value = replace. */
+export interface UpdateAuthSettingsInput {
+  ldap: Omit<LdapSettings, 'hasBindPassword'> & { bindPassword?: string };
+}
+
+export interface LdapTestResult {
+  success: boolean;
+  message: string;
 }
 
 export interface SmtpSettings {
-  serverUrl: string;
-  port: number;
-  credentialsSecretRef: string;
-  senderAddress: string;
+  host: string;
+  port: number | null;
+  secure: boolean;
+  username: string | null;
+  hasPassword: boolean;
+  fromAddress: string;
+  requireTLS: boolean;
+  tlsRejectUnauthorized: boolean;
+  connectTimeoutMs: number | null;
+  greetingTimeoutMs: number | null;
+  socketTimeoutMs: number | null;
+}
+
+/** password: omit = leave unchanged, '' = clear, value = replace. */
+export interface UpdateSmtpSettingsInput extends Omit<SmtpSettings, 'hasPassword'> {
+  password?: string;
+}
+
+export interface SmtpTestResult {
+  success: boolean;
+  message: string;
+}
+
+export interface AppearanceSettings {
+  logoUrl: string | null;
+  faviconUrl: string | null;
+  title: string | null;
+  primaryColor: string | null;
+  backgroundColor: string | null;
+}
+
+/** Any field omitted = unchanged; explicit null = reset to default. */
+export interface UpdateAppearanceSettingsInput {
+  logoFileId?: string | null;
+  faviconFileId?: string | null;
+  title?: string | null;
+  primaryColor?: string | null;
+  backgroundColor?: string | null;
+}
+
+export interface UploadedFileMeta {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+}
+
+export interface AuthMethodsStatus {
+  local: true;
+  ldap: boolean;
 }

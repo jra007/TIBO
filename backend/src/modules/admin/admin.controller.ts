@@ -2,12 +2,14 @@ import { Body, Controller, Get, Param, Post, Put, Req } from '@nestjs/common';
 import type { AuthenticatedRequest } from '../auth/authenticated-request';
 import { RequirePermission } from '../rbac/decorators/require-permission.decorator';
 import type { Permission } from '../rbac/permissions';
-import { AuthSettingsService, type AuthSettings } from './settings/auth-settings.service';
+import { AuthSettingsService, type UpdateAuthSettingsInput } from './settings/auth-settings.service';
 import { DataResetService } from './settings/data-reset.service';
 import { GroupsService } from './settings/groups.service';
+import { LdapAuthProvider } from './settings/ldap-auth.provider';
 import { RetentionSettingsService, type RetentionPolicy } from './settings/retention-settings.service';
 import { RolesService } from './settings/roles.service';
-import { SmtpSettingsService, type SmtpSettings } from './settings/smtp-settings.service';
+import { SmtpMailerService } from './settings/smtp-mailer.service';
+import { SmtpSettingsService, type UpdateSmtpSettingsInput } from './settings/smtp-settings.service';
 import { UsersService } from './settings/users.service';
 
 @Controller('admin/settings')
@@ -16,7 +18,9 @@ export class AdminController {
   constructor(
     private readonly retentionSettings: RetentionSettingsService,
     private readonly authSettings: AuthSettingsService,
+    private readonly ldapAuthProvider: LdapAuthProvider,
     private readonly smtpSettings: SmtpSettingsService,
+    private readonly smtpMailer: SmtpMailerService,
     private readonly groupsService: GroupsService,
     private readonly rolesService: RolesService,
     private readonly usersService: UsersService,
@@ -45,8 +49,13 @@ export class AdminController {
   }
 
   @Put('auth')
-  updateAuthSettings(@Body() body: AuthSettings, @Req() req: AuthenticatedRequest) {
+  updateAuthSettings(@Body() body: UpdateAuthSettingsInput, @Req() req: AuthenticatedRequest) {
     return this.authSettings.update(body, req.user.id);
+  }
+
+  @Post('auth/ldap/test')
+  testLdapConnection(@Body() body: { testUsername?: string; testPassword?: string }) {
+    return this.ldapAuthProvider.testConnection(body.testUsername, body.testPassword);
   }
 
   @Get('smtp')
@@ -55,8 +64,13 @@ export class AdminController {
   }
 
   @Put('smtp')
-  updateSmtpSettings(@Body() body: SmtpSettings, @Req() req: AuthenticatedRequest) {
+  updateSmtpSettings(@Body() body: UpdateSmtpSettingsInput, @Req() req: AuthenticatedRequest) {
     return this.smtpSettings.update(body, req.user.id);
+  }
+
+  @Post('smtp/test')
+  sendSmtpTestEmail(@Body('to') to: string) {
+    return this.smtpMailer.sendTestEmail(to);
   }
 
   @Get('users')

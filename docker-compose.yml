@@ -33,6 +33,9 @@ services:
       # Set both via .env — see .env.example.
       JWT_SECRET: ${JWT_SECRET:-dev-insecure-secret-change-me}
       TIBO_ADMIN_PASSWORD: ${TIBO_ADMIN_PASSWORD:-changeme123}
+      # Where uploaded files (appearance logo/favicon) are stored on disk — persists via the
+      # ./backend bind mount above, no separate volume needed.
+      UPLOAD_DIR: ${UPLOAD_DIR:-/app/uploads}
     ports:
       - "${BACKEND_PORT:-3000}:3000"
     volumes:

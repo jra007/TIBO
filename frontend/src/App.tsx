@@ -10,6 +10,7 @@ import { ViewDetailPage } from './pages/ViewDetailPage';
 import { DashboardsPage } from './pages/DashboardsPage';
 import { ViewBuilderPage } from './pages/view-builder/ViewBuilderPage';
 import { AdminLayout } from './pages/admin/AdminLayout';
+import { AppearanceSettingsPage } from './pages/admin/AppearanceSettingsPage';
 import { DataResetPage } from './pages/admin/DataResetPage';
 import { IngestionJournalPage } from './pages/admin/IngestionJournalPage';
 import { RelationsReviewPage } from './pages/admin/RelationsReviewPage';
@@ -18,68 +19,79 @@ import { GroupsPage } from './pages/admin/GroupsPage';
 import { RbacPage } from './pages/admin/RbacPage';
 import { AuthSettingsPage } from './pages/admin/AuthSettingsPage';
 import { SmtpSettingsPage } from './pages/admin/SmtpSettingsPage';
+import { AppearanceProvider } from './theme/AppearanceContext';
 
 function App() {
   return (
-    <AuthProvider>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route
-          element={
-            <RequireAuth>
-              <AppLayout />
-            </RequireAuth>
-          }
-        >
-          <Route index element={<Navigate to="/views" replace />} />
-          <Route path="/views" element={<ViewsPage />} />
-          <Route path="/views/new" element={<ViewBuilderPage />} />
-          <Route path="/views/:id" element={<ViewDetailPage />} />
-          <Route path="/views/:id/edit" element={<ViewBuilderPage />} />
-          <Route path="/dashboards" element={<DashboardsPage />} />
-          <Route path="/account" element={<AccountPage />} />
+    <AppearanceProvider>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
           <Route
-            path="/admin"
             element={
-              <RequirePermissionRoute permission="settings:access">
-                <AdminLayout />
-              </RequirePermissionRoute>
+              <RequireAuth>
+                <AppLayout />
+              </RequireAuth>
             }
           >
-            <Route index element={<Navigate to="/admin/ingestion" replace />} />
-            <Route path="ingestion" element={<IngestionJournalPage />} />
-            <Route path="relations" element={<RelationsReviewPage />} />
+            <Route index element={<Navigate to="/views" replace />} />
+            <Route path="/views" element={<ViewsPage />} />
+            <Route path="/views/new" element={<ViewBuilderPage />} />
+            <Route path="/views/:id" element={<ViewDetailPage />} />
+            <Route path="/views/:id/edit" element={<ViewBuilderPage />} />
+            <Route path="/dashboards" element={<DashboardsPage />} />
+            <Route path="/account" element={<AccountPage />} />
             <Route
-              path="retention"
+              path="/admin"
               element={
-                <RequirePermissionRoute permission="settings:retention:edit">
-                  <RetentionSettingsPage />
+                <RequirePermissionRoute permission="settings:access">
+                  <AdminLayout />
                 </RequirePermissionRoute>
               }
-            />
-            <Route path="groups" element={<GroupsPage />} />
-            <Route
-              path="rbac"
-              element={
-                <RequirePermissionRoute permission="settings:rbac:edit">
-                  <RbacPage />
-                </RequirePermissionRoute>
-              }
-            />
-            <Route path="auth" element={<AuthSettingsPage />} />
-            <Route path="smtp" element={<SmtpSettingsPage />} />
-            <Route
-              path="reset"
-              element={
-                <RequirePermissionRoute permission="settings:reset:execute">
-                  <DataResetPage />
-                </RequirePermissionRoute>
-              }
-            />
+            >
+              <Route index element={<Navigate to="/admin/ingestion" replace />} />
+              <Route path="ingestion" element={<IngestionJournalPage />} />
+              <Route path="relations" element={<RelationsReviewPage />} />
+              <Route
+                path="retention"
+                element={
+                  <RequirePermissionRoute permission="settings:retention:edit">
+                    <RetentionSettingsPage />
+                  </RequirePermissionRoute>
+                }
+              />
+              <Route path="groups" element={<GroupsPage />} />
+              <Route
+                path="rbac"
+                element={
+                  <RequirePermissionRoute permission="settings:rbac:edit">
+                    <RbacPage />
+                  </RequirePermissionRoute>
+                }
+              />
+              <Route path="auth" element={<AuthSettingsPage />} />
+              <Route path="smtp" element={<SmtpSettingsPage />} />
+              <Route
+                path="appearance"
+                element={
+                  <RequirePermissionRoute permission="settings:appearance:edit">
+                    <AppearanceSettingsPage />
+                  </RequirePermissionRoute>
+                }
+              />
+              <Route
+                path="reset"
+                element={
+                  <RequirePermissionRoute permission="settings:reset:execute">
+                    <DataResetPage />
+                  </RequirePermissionRoute>
+                }
+              />
+            </Route>
           </Route>
-        </Route>
-      </Routes>
-    </AuthProvider>
+        </Routes>
+      </AuthProvider>
+    </AppearanceProvider>
   );
 }
 

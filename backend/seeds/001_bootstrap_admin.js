@@ -14,6 +14,7 @@ const ALL_PERMISSIONS = [
   'settings:rbac:edit',
   'settings:reset:execute',
   'ingestion:manage',
+  'settings:appearance:edit',
 ];
 
 const ADMIN_USERNAME = 'admin';

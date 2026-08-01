@@ -8,6 +8,7 @@ export type { Permission };
 interface AuthContextValue {
   session: Session | null;
   login: (username: string, password: string) => Promise<void>;
+  loginLdap: (username: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -22,12 +23,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(result);
   }
 
+  async function loginLdap(username: string, password: string) {
+    const result = await apiClient.post<Session>('/auth/login/ldap', { username, password });
+    saveSession(result);
+    setSession(result);
+  }
+
   function logout() {
     clearSession();
     setSession(null);
   }
 
-  return <AuthContext.Provider value={{ session, login, logout }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ session, login, loginLdap, logout }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthContextValue {
