@@ -281,6 +281,11 @@ label.button:hover {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 16px;
+  /* Grid items default to min-width: auto, refusing to shrink below their content's natural
+     width (a wide table, in particular) — that's what was pushing tiles past their column and
+     breaking the grid. min-width: 0 lets this tile actually respect its track, so overflow-x on
+     .table-scroll below can do its job instead of the whole tile blowing out sideways. */
+  min-width: 0;
 }
 
 .dashboard-tile h2 {
@@ -637,6 +642,13 @@ dialog.confirm-dialog h2 {
 }
 
 /* ---------- Tables ---------- */
+
+/* A table's natural content width can exceed its container (many columns, long values) — this
+   scrolls just the table instead of it bleeding past its container's edge (a dashboard tile, in
+   particular, where the available width is much tighter than a full page). */
+.table-scroll {
+  overflow-x: auto;
+}
 
 table {
   width: 100%;
