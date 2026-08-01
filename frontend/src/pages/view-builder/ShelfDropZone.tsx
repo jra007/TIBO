@@ -60,6 +60,7 @@ export function ShelfDropZone({
   onRemove,
   onAggregationChange,
   onFilterChange,
+  onQuickStatMenu,
 }: {
   id: ShelfId;
   label: string;
@@ -67,6 +68,7 @@ export function ShelfDropZone({
   onRemove: (fieldId: string) => void;
   onAggregationChange: (fieldId: string, aggregation: Aggregation | undefined) => void;
   onFilterChange: (fieldId: string, filter: FilterValue) => void;
+  onQuickStatMenu?: (field: Field, position: { x: number; y: number }) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
 
@@ -97,6 +99,20 @@ export function ShelfDropZone({
                   </select>
                 </label>
               )
+            )}
+            {onQuickStatMenu && field.dtype === 'numeric' && (
+              <button
+                type="button"
+                className="secondary"
+                aria-label={`Calcul rapide pour ${displayLabel(field)}`}
+                title="Calcul rapide (% du total, variation, cumul, rang, moyenne mobile)"
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  onQuickStatMenu(field, { x: rect.left, y: rect.bottom });
+                }}
+              >
+                ⋯
+              </button>
             )}
             <button type="button" aria-label={`Retirer ${displayLabel(field)} de ${label}`} onClick={() => onRemove(field.id)}>
               ×

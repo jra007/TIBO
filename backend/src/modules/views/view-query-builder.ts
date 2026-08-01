@@ -1,7 +1,8 @@
 import type { Knex } from 'knex';
 import { getLabelsMap } from './column-labels';
 import { collectFieldRefs, compileFormula, parseFormula } from './formula';
-import type { Aggregation, CalculatedField, FilterCondition, ShelfDefinition } from './views.service';
+import { compileQuickStatSql, QUICK_STAT_TABLE, type QuickStatField } from './quick-stats';
+import type { Aggregation, CalculatedField, FieldRef, FilterCondition, ShelfDefinition } from './views.service';
 import { CALCULATED_FIELD_TABLE } from './views.service';
 
 interface RelationRow {
@@ -111,6 +112,7 @@ export async function buildViewDataQuery(
   shelves: ShelfDefinition,
   relationIds: string[],
   calculatedFields: CalculatedField[],
+  quickStatFields: QuickStatField[] = [],
 ): Promise<{
   headers: string[];
   headerLabels: string[];
@@ -160,6 +162,11 @@ export async function buildViewDataQuery(
       : (labelsMap.get(`${f.tableName}.${f.columnName}`) ?? f.columnName),
   );
   const aliases = fields.map((_, i) => `col_${i}`);
+  const findAlias = (ref: FieldRef): string => {
+    const index = fields.findIndex((f) => f.tableName === ref.tableName && f.columnName === ref.columnName && f.aggregation === ref.aggregation);
+    if (index === -1) throw new Error(`Champ introuvable pour le calcul rapide : ${ref.tableName}.${ref.columnName}`);
+    return aliases[index];
+  };
   const dimensionFields = fields.filter((f) => !f.aggregation);
   const measureFields = fields.filter((f) => f.aggregation);
 
@@ -185,10 +192,35 @@ export async function buildViewDataQuery(
     }
   }
 
-  const mapRow = (row: Record<string, unknown>): Record<string, unknown> =>
-    Object.fromEntries(headers.map((header, i) => [header, row[aliases[i]]]));
+  if (quickStatFields.length === 0) {
+    const mapRow = (row: Record<string, unknown>): Record<string, unknown> =>
+      Object.fromEntries(headers.map((header, i) => [header, row[aliases[i]]]));
+    return { headers, headerLabels, query, mapRow };
+  }
 
-  return { headers, headerLabels, query, mapRow };
+  // Quick stats (percent of total, variation, running total, rank, moving average) are SQL
+  // window functions computed over the result of the query above, not per-row scalars — so the
+  // query is wrapped as a subquery and the window expressions are added on top of it, referencing
+  // its own column aliases (col_0, col_1, ...) directly. Every source/order field a quick stat
+  // needs is guaranteed to already be one of `fields` above (that's how the UI offers them — a
+  // right-click on a field already placed in the view), so no new joins are needed here.
+  let wrapped = knex(query.as('qs_base')).select(knex.raw('qs_base.*'));
+  const statAliases = quickStatFields.map((_, i) => `stat_${i}`);
+  quickStatFields.forEach((statField, i) => {
+    const sourceAlias = findAlias(statField.sourceField);
+    const orderAlias = statField.orderField ? findAlias(statField.orderField) : null;
+    const { sql, bindings } = compileQuickStatSql(statField, sourceAlias, orderAlias);
+    wrapped = wrapped.select(knex.raw(`${sql} as ??`, [...bindings, statAliases[i]]));
+  });
+
+  const finalHeaders = [...headers, ...quickStatFields.map((f) => `${QUICK_STAT_TABLE}.${f.id}`)];
+  const finalHeaderLabels = [...headerLabels, ...quickStatFields.map((f) => f.label)];
+  const finalAliases = [...aliases, ...statAliases];
+
+  const mapRow = (row: Record<string, unknown>): Record<string, unknown> =>
+    Object.fromEntries(finalHeaders.map((header, i) => [header, row[finalAliases[i]]]));
+
+  return { headers: finalHeaders, headerLabels: finalHeaderLabels, query: wrapped, mapRow };
 }
 
 function connectsToJoined(relation: RelationRow, joined: Set<string>, candidate: string): boolean {

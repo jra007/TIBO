@@ -2,9 +2,20 @@ import { DndContext, type DragEndEvent } from '@dnd-kit/core';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { apiClient } from '../../api/client';
-import { CALCULATED_FIELD_TABLE, type CalculatedField, type FilterCondition, type SavedView, type TableSchema } from '../../api/types';
+import {
+  CALCULATED_FIELD_TABLE,
+  QUICK_STAT_LABELS,
+  QUICK_STAT_NEEDS_ORDER_FIELD,
+  type CalculatedField,
+  type FilterCondition,
+  type QuickStatField,
+  type QuickStatKind,
+  type SavedView,
+  type TableSchema,
+} from '../../api/types';
 import { CalculatedFieldEditor } from './CalculatedFieldEditor';
 import { FieldChip } from './FieldChip';
+import { QuickStatMenu, type QuickStatMenuPosition } from './QuickStatMenu';
 import { ShelfDropZone } from './ShelfDropZone';
 import {
   defaultFilterValue,
@@ -54,6 +65,10 @@ function fieldRefToField(ref: { tableName: string; columnName: string; aggregati
   };
 }
 
+function fieldRefMatches(ref: { tableName: string; columnName: string }, field: Field): boolean {
+  return ref.tableName === field.tableName && ref.columnName === field.columnName;
+}
+
 function filterConditionToField(condition: FilterCondition, availableFields: Field[]): Field {
   const match = availableFields.find((f) => f.tableName === condition.tableName && f.columnName === condition.columnName);
   return {
@@ -74,6 +89,8 @@ export function ViewBuilderPage() {
   const [calculatedFields, setCalculatedFields] = useState<CalculatedField[]>([]);
   const [editingCalculatedField, setEditingCalculatedField] = useState<'new' | CalculatedField | null>(null);
   const [simpleCondition, setSimpleCondition] = useState<SimpleCondition>(emptySimpleCondition());
+  const [quickStatFields, setQuickStatFields] = useState<QuickStatField[]>([]);
+  const [quickStatMenu, setQuickStatMenu] = useState<{ field: Field; position: QuickStatMenuPosition } | null>(null);
   const [fieldSearch, setFieldSearch] = useState('');
   const [shelves, setShelves] = useState<ShelfAssignment>(emptyShelfAssignment);
   const [manualChartType, setManualChartType] = useState<ChartType | null>(null);
@@ -97,6 +114,7 @@ export function ViewBuilderPage() {
         setName(view.name);
         setManualChartType(view.chartType);
         setCalculatedFields(view.calculatedFields);
+        setQuickStatFields(view.quickStatFields ?? []);
         const combinedFields = [...schemaFields, ...view.calculatedFields.map(calculatedFieldToField)];
         setShelves({
           rows: view.shelves.rows.map((f) => fieldRefToField(f, combinedFields)),
@@ -144,14 +162,69 @@ export function ViewBuilderPage() {
   }
 
   function removeFromShelf(shelfId: ShelfId, fieldId: string) {
+    const removedField = shelves[shelfId].find((f) => f.id === fieldId);
     setShelves((prev) => ({ ...prev, [shelfId]: prev[shelfId].filter((f) => f.id !== fieldId) }));
+    // A quick stat can't survive its source/order field leaving the view — same reasoning as
+    // calculated fields losing a referenced column, just enforced client-side up front instead
+    // of surfacing as a save-time error.
+    if (removedField) {
+      setQuickStatFields((prev) =>
+        prev.filter(
+          (stat) =>
+            !fieldRefMatches(stat.sourceField, removedField) && !(stat.orderField && fieldRefMatches(stat.orderField, removedField)),
+        ),
+      );
+    }
   }
 
   function updateAggregation(shelfId: ShelfId, fieldId: string, aggregation: Aggregation | undefined) {
+    const field = shelves[shelfId].find((f) => f.id === fieldId);
     setShelves((prev) => ({
       ...prev,
       [shelfId]: prev[shelfId].map((f) => (f.id === fieldId ? { ...f, aggregation } : f)),
     }));
+    // Keep any quick stat built on this field pointed at the right aggregated value — changing
+    // sum→avg (etc.) changes what the underlying column actually means.
+    if (field) {
+      setQuickStatFields((prev) =>
+        prev.map((stat) => (fieldRefMatches(stat.sourceField, field) ? { ...stat, sourceField: { ...stat.sourceField, aggregation } } : stat)),
+      );
+    }
+  }
+
+  function handleQuickStatSelect(kind: QuickStatKind) {
+    if (!quickStatMenu) return;
+    const { field } = quickStatMenu;
+    setQuickStatMenu(null);
+
+    let orderField: Field | null = null;
+    if (QUICK_STAT_NEEDS_ORDER_FIELD[kind]) {
+      const placed = [...shelves.rows, ...shelves.columns, ...shelves.color, ...shelves.size];
+      orderField = placed.find((f) => f.dtype === 'date' && f.id !== field.id) ?? null;
+      if (!orderField) {
+        setError('Ce calcul nécessite un champ de date déjà placé en lignes, colonnes, couleur ou taille.');
+        return;
+      }
+    }
+
+    const newField: QuickStatField = {
+      id: crypto.randomUUID(),
+      label: `${QUICK_STAT_LABELS[kind]} — ${displayLabel(field)}`,
+      kind,
+      sourceField: { tableName: field.tableName, columnName: field.columnName, aggregation: field.aggregation },
+      orderField: orderField ? { tableName: orderField.tableName, columnName: orderField.columnName } : undefined,
+      windowSize: kind === 'moving_average' ? 3 : undefined,
+      direction: kind === 'rank' ? 'desc' : undefined,
+    };
+    setQuickStatFields((prev) => [...prev, newField]);
+  }
+
+  function updateQuickStat(id: string, patch: Partial<QuickStatField>) {
+    setQuickStatFields((prev) => prev.map((f) => (f.id === id ? { ...f, ...patch } : f)));
+  }
+
+  function handleDeleteQuickStat(id: string) {
+    setQuickStatFields((prev) => prev.filter((f) => f.id !== id));
   }
 
   function updateFilter(fieldId: string, filter: FilterValue) {
@@ -248,6 +321,7 @@ export function ViewBuilderPage() {
           filters: stripFilterId(shelves.filters),
         },
         calculatedFields,
+        quickStatFields,
       };
       if (isEditing) {
         await apiClient.put(`/views/${id}`, payload);
@@ -366,6 +440,42 @@ export function ViewBuilderPage() {
                   onCancel={() => setEditingCalculatedField(null)}
                 />
               )}
+
+              {/* Quick stats aren't dragged onto shelves — right-click a numeric field already
+                  placed (rows/columns/color/size) to add one. Listed here so parameters (window
+                  size, rank order) stay reachable without a second drop-target concept. */}
+              {quickStatFields.length > 0 && (
+                <ul className="calculated-field-list">
+                  {quickStatFields.map((stat) => (
+                    <li key={stat.id}>
+                      <span>{stat.label}</span>
+                      {stat.kind === 'moving_average' && (
+                        <label>
+                          Périodes
+                          <input
+                            type="number"
+                            min={1}
+                            value={stat.windowSize ?? 3}
+                            onChange={(e) => updateQuickStat(stat.id, { windowSize: Math.max(1, Number(e.target.value) || 1) })}
+                          />
+                        </label>
+                      )}
+                      {stat.kind === 'rank' && (
+                        <label>
+                          Ordre
+                          <select value={stat.direction ?? 'desc'} onChange={(e) => updateQuickStat(stat.id, { direction: e.target.value as 'asc' | 'desc' })}>
+                            <option value="desc">Décroissant</option>
+                            <option value="asc">Croissant</option>
+                          </select>
+                        </label>
+                      )}
+                      <button type="button" className="danger" onClick={() => handleDeleteQuickStat(stat.id)}>
+                        Supprimer
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             <div className="shelves">
@@ -378,6 +488,7 @@ export function ViewBuilderPage() {
                   onRemove={(fieldId) => removeFromShelf(shelf.id, fieldId)}
                   onAggregationChange={(fieldId, aggregation) => updateAggregation(shelf.id, fieldId, aggregation)}
                   onFilterChange={updateFilter}
+                  onQuickStatMenu={shelf.id === 'filters' ? undefined : (field, position) => setQuickStatMenu({ field, position })}
                 />
               ))}
             </div>
@@ -398,6 +509,10 @@ export function ViewBuilderPage() {
           </div>
         </div>
       </DndContext>
+
+      {quickStatMenu && (
+        <QuickStatMenu position={quickStatMenu.position} onSelect={handleQuickStatSelect} onClose={() => setQuickStatMenu(null)} />
+      )}
     </section>
   );
 }

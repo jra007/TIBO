@@ -3,6 +3,7 @@ import type { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../../database/database.constants';
 import { ColumnProfilerService } from '../relations/column-profiler.service';
 import { collectFieldRefs, FormulaError, parseFormula, type FormulaDtype } from './formula';
+import { quickStatNeedsOrderField, type QuickStatField } from './quick-stats';
 import { buildViewDataQuery } from './view-query-builder';
 
 export type ChartType = 'bar' | 'line' | 'scatter' | 'heatmap' | 'table' | 'geo';
@@ -59,6 +60,7 @@ export interface SavedView {
   chartType: ChartType;
   shelves: ShelfDefinition;
   calculatedFields: CalculatedField[];
+  quickStatFields: QuickStatField[];
   visibility: ViewVisibility;
   sharedWithGroupId: string | null;
   relationStatus: ViewRelationStatus;
@@ -70,6 +72,7 @@ export interface CreateViewInput {
   chartType: ChartType;
   shelves: ShelfDefinition;
   calculatedFields: CalculatedField[];
+  quickStatFields: QuickStatField[];
 }
 
 interface ViewRow {
@@ -79,6 +82,7 @@ interface ViewRow {
   chart_type: ChartType;
   shelves: ShelfDefinition;
   calculated_fields: CalculatedField[];
+  quick_stat_fields: QuickStatField[];
   tables_used: string[];
   relation_ids: string[];
   visibility: ViewVisibility;
@@ -95,7 +99,9 @@ export class ViewsService {
 
   async create(ownerId: string, input: CreateViewInput): Promise<SavedView> {
     const calculatedFields = input.calculatedFields ?? [];
+    const quickStatFields = input.quickStatFields ?? [];
     const calculatedFieldTables = await this.validateCalculatedFields(calculatedFields);
+    this.validateQuickStatFields(quickStatFields, input.shelves);
     const tablesUsed = [...new Set([...extractTablesUsed(input.shelves), ...calculatedFieldTables])];
     const relationIds = await this.pinRelationsForTablePairs(tablesUsed);
 
@@ -106,6 +112,7 @@ export class ViewsService {
         chart_type: input.chartType,
         shelves: JSON.stringify(input.shelves),
         calculated_fields: JSON.stringify(calculatedFields),
+        quick_stat_fields: JSON.stringify(quickStatFields),
         tables_used: JSON.stringify(tablesUsed),
         relation_ids: JSON.stringify(relationIds),
         visibility: 'private',
@@ -122,7 +129,9 @@ export class ViewsService {
     if (existing.owner_id !== ownerId) throw new ForbiddenException("Vous n'êtes pas propriétaire de cette vue");
 
     const calculatedFields = input.calculatedFields ?? [];
+    const quickStatFields = input.quickStatFields ?? [];
     const calculatedFieldTables = await this.validateCalculatedFields(calculatedFields);
+    this.validateQuickStatFields(quickStatFields, input.shelves);
     const tablesUsed = [...new Set([...extractTablesUsed(input.shelves), ...calculatedFieldTables])];
     const relationIds = await this.pinRelationsForTablePairs(tablesUsed);
 
@@ -133,6 +142,7 @@ export class ViewsService {
         chart_type: input.chartType,
         shelves: JSON.stringify(input.shelves),
         calculated_fields: JSON.stringify(calculatedFields),
+        quick_stat_fields: JSON.stringify(quickStatFields),
         tables_used: JSON.stringify(tablesUsed),
         relation_ids: JSON.stringify(relationIds),
         updated_at: new Date(),
@@ -166,6 +176,34 @@ export class ViewsService {
     return [...tables];
   }
 
+  /**
+   * A quick stat's source/order fields must already be placed on a shelf (that's how the UI
+   * offers them — right-click on a field already in the view), so there are no new tables to
+   * join here, unlike calculated fields. Purely a shape/reference check.
+   */
+  private validateQuickStatFields(quickStatFields: QuickStatField[], shelves: ShelfDefinition): void {
+    if (quickStatFields.length === 0) return;
+
+    const placedFields = [...shelves.rows, ...shelves.columns, ...shelves.color, ...shelves.size];
+    const isPlaced = (ref: { tableName: string; columnName: string; aggregation?: Aggregation }): boolean =>
+      placedFields.some((f) => f.tableName === ref.tableName && f.columnName === ref.columnName && f.aggregation === ref.aggregation);
+
+    for (const field of quickStatFields) {
+      if (!isPlaced(field.sourceField)) {
+        throw new BadRequestException(`Calcul rapide "${field.label}" : le champ source n'est plus présent dans la vue.`);
+      }
+      if (quickStatNeedsOrderField(field.kind)) {
+        if (!field.orderField) throw new BadRequestException(`Calcul rapide "${field.label}" : un champ de tri (axe temporel) est requis.`);
+        if (!isPlaced(field.orderField)) {
+          throw new BadRequestException(`Calcul rapide "${field.label}" : le champ de tri n'est plus présent dans la vue.`);
+        }
+      }
+      if (field.kind === 'moving_average' && (!field.windowSize || field.windowSize < 1)) {
+        throw new BadRequestException(`Calcul rapide "${field.label}" : la taille de fenêtre doit être un entier positif.`);
+      }
+    }
+  }
+
   async getById(viewId: string): Promise<SavedView> {
     const row: ViewRow | undefined = await this.knex('views').where({ id: viewId }).first();
     if (!row) throw new NotFoundException(`View ${viewId} not found`);
@@ -191,7 +229,13 @@ export class ViewsService {
     const row: ViewRow | undefined = await this.knex('views').where({ id: viewId }).first();
     if (!row) throw new NotFoundException(`View ${viewId} not found`);
 
-    const { headers, headerLabels, query, mapRow } = await buildViewDataQuery(this.knex, row.shelves, row.relation_ids, row.calculated_fields);
+    const { headers, headerLabels, query, mapRow } = await buildViewDataQuery(
+      this.knex,
+      row.shelves,
+      row.relation_ids,
+      row.calculated_fields,
+      row.quick_stat_fields,
+    );
     const rows = await query;
     return { headers, headerLabels, rows: rows.map(mapRow) };
   }
@@ -253,6 +297,7 @@ export class ViewsService {
       chartType: row.chart_type,
       shelves: row.shelves,
       calculatedFields: row.calculated_fields,
+      quickStatFields: row.quick_stat_fields,
       visibility: row.visibility,
       sharedWithGroupId: row.shared_with_group_id,
       relationStatus: await this.computeRelationStatus(row.tables_used, row.relation_ids),

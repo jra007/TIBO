@@ -85,6 +85,40 @@ export interface CalculatedField {
 
 export const CALCULATED_FIELD_TABLE = '_calc';
 
+export type QuickStatKind = 'percent_of_total' | 'variation' | 'running_total' | 'rank' | 'moving_average';
+
+export const QUICK_STAT_LABELS: Record<QuickStatKind, string> = {
+  percent_of_total: '% du total',
+  variation: 'Variation vs période précédente (%)',
+  running_total: 'Cumul (total cumulé)',
+  rank: 'Rang',
+  moving_average: 'Moyenne mobile',
+};
+
+export const QUICK_STAT_NEEDS_ORDER_FIELD: Record<QuickStatKind, boolean> = {
+  percent_of_total: false,
+  variation: true,
+  running_total: true,
+  rank: false,
+  moving_average: true,
+};
+
+/** A one-click statistic (window function) computed from an already-placed field — see the view builder's right-click menu. Never placed on a shelf itself; always appended as an extra output column. */
+export interface QuickStatField {
+  id: string;
+  label: string;
+  kind: QuickStatKind;
+  sourceField: FieldRef;
+  /** Required for variation / running_total / moving_average — typically a date/time dimension already on rows or columns. */
+  orderField?: FieldRef;
+  /** Number of periods (inclusive of the current one) for moving_average. */
+  windowSize?: number;
+  /** Rank order — defaults to 'desc' (highest value = rank 1). */
+  direction?: 'asc' | 'desc';
+}
+
+export const QUICK_STAT_TABLE = '_stat';
+
 export interface ViewData {
   headers: string[];
   headerLabels: string[];
@@ -98,6 +132,7 @@ export interface SavedView {
   chartType: ChartType;
   shelves: ShelfDefinition;
   calculatedFields: CalculatedField[];
+  quickStatFields: QuickStatField[];
   visibility: ViewVisibility;
   sharedWithGroupId: string | null;
   relationStatus: ViewRelationStatus;
