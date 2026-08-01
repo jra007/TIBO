@@ -34,6 +34,16 @@ export class GroupsService {
     return rows.map(toDomain);
   }
 
+  /** Groups the given user actually belongs to — powers "shared with my team" views without the viewer having to pick a group manually. */
+  async listForUser(userId: string): Promise<Group[]> {
+    const rows: GroupRow[] = await this.knex('groups')
+      .join('user_group', 'groups.id', 'user_group.group_id')
+      .where('user_group.user_id', userId)
+      .select('groups.*')
+      .orderBy('groups.name');
+    return rows.map(toDomain);
+  }
+
   async addMember(groupId: string, userId: string): Promise<void> {
     await this.knex('user_group').insert({ group_id: groupId, user_id: userId }).onConflict(['user_id', 'group_id']).ignore();
   }
