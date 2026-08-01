@@ -113,6 +113,9 @@ export async function buildViewDataQuery(
   relationIds: string[],
   calculatedFields: CalculatedField[],
   quickStatFields: QuickStatField[] = [],
+  /** The global date selector's chosen day (UTC, "YYYY-MM-DD") — undefined falls back per table to
+   * that table's own most recent date_ingestion. See applyImplicitDateFilter below. */
+  selectedDate?: string,
 ): Promise<{
   headers: string[];
   headerLabels: string[];
@@ -151,6 +154,22 @@ export async function buildViewDataQuery(
   }
 
   for (const filter of shelves.filters) query = applyFilter(query, filter, resolveFieldSql(knex, filter, calculatedFieldsById));
+
+  // Per-table historization filter (addendum: TIBO_addendum_doublons_et_dates.md, point 4): a
+  // table becomes append-only history the moment it's re-ingested, so without this every view
+  // would silently sum every day ever imported instead of just one snapshot. A table the user has
+  // *explicitly* dragged date_ingestion onto (in shelves.filters) is left alone — that's the
+  // "compare several dates in one view" escape hatch, and takes precedence over the implicit one.
+  const explicitDateFilterTables = new Set(shelves.filters.filter((f) => f.columnName === 'date_ingestion').map((f) => f.tableName));
+  for (const table of tables) {
+    if (explicitDateFilterTables.has(table)) continue;
+    const hasDateIngestion = await knex.schema.hasColumn(table, 'date_ingestion');
+    if (!hasDateIngestion) continue;
+
+    const effectiveDate = selectedDate ?? (await resolveLatestDate(knex, table));
+    if (!effectiveDate) continue; // table has no rows yet — nothing to filter
+    query = query.andWhere(`${table}.date_ingestion`, effectiveDate).andWhere(`${table}.is_obsolete`, false);
+  }
 
   const realFields = fields.filter((f) => f.tableName !== CALCULATED_FIELD_TABLE);
   const labelsMap = await getLabelsMap(knex, realFields);
@@ -225,4 +244,12 @@ export async function buildViewDataQuery(
 
 function connectsToJoined(relation: RelationRow, joined: Set<string>, candidate: string): boolean {
   return (joined.has(relation.source_table) && relation.target_table === candidate) || (joined.has(relation.target_table) && relation.source_table === candidate);
+}
+
+/** A table's own most recent import day — the fallback when no global date was explicitly selected. */
+async function resolveLatestDate(knex: Knex, table: string): Promise<string | null> {
+  const row = await knex(table).max('date_ingestion as d').first();
+  const value = row?.d as string | Date | null | undefined;
+  if (!value) return null;
+  return value instanceof Date ? value.toISOString().slice(0, 10) : value;
 }

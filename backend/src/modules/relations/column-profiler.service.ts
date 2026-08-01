@@ -41,7 +41,7 @@ export class ColumnProfilerService {
     for (const tableName of tableNames) {
       const { rows: columns } = await this.knex.raw(
         `SELECT column_name, data_type FROM information_schema.columns
-         WHERE table_schema = 'public' AND table_name = ? AND column_name <> 'id'
+         WHERE table_schema = 'public' AND table_name = ? AND column_name NOT IN ('id', 'is_obsolete')
          ORDER BY ordinal_position`,
         [tableName],
       );
@@ -63,7 +63,7 @@ export class ColumnProfilerService {
     for (const tableName of tableNames) {
       const { rows: columns } = await this.knex.raw(
         `SELECT column_name, data_type FROM information_schema.columns
-         WHERE table_schema = 'public' AND table_name = ? AND column_name <> 'id'
+         WHERE table_schema = 'public' AND table_name = ? AND column_name NOT IN ('id', 'is_obsolete')
          ORDER BY ordinal_position`,
         [tableName],
       );

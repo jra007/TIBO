@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query, Req } from '@nestjs/common';
 import type { AuthenticatedRequest } from '../auth/authenticated-request';
 import { RequirePermission } from '../rbac/decorators/require-permission.decorator';
 import type { FormulaDtype } from './formula';
@@ -46,8 +46,8 @@ export class ViewsController {
 
   @Get(':id/data')
   @RequirePermission('view:read')
-  getData(@Param('id') id: string) {
-    return this.viewsService.getData(id);
+  getData(@Param('id') id: string, @Query('date') date?: string) {
+    return this.viewsService.getData(id, date);
   }
 
   @Post(':id/share')

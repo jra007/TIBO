@@ -295,8 +295,14 @@ export class ViewsService {
     return Promise.all(rows.map((row) => this.toDomain(row)));
   }
 
-  /** Raw underlying data (headers + rows) for live chart/table rendering — see view-query-builder for the no-aggregation caveat. */
-  async getData(viewId: string): Promise<{ headers: string[]; headerLabels: string[]; rows: Record<string, unknown>[] }> {
+  /**
+   * Raw underlying data (headers + rows) for live chart/table rendering — see view-query-builder
+   * for the no-aggregation caveat. `selectedDate` is the app-wide date selector's current choice
+   * (undefined = fall back to each table's own latest import day); it implicitly filters every
+   * table's date_ingestion/is_obsolete unless the view already has an explicit date_ingestion
+   * filter of its own (see buildViewDataQuery).
+   */
+  async getData(viewId: string, selectedDate?: string): Promise<{ headers: string[]; headerLabels: string[]; rows: Record<string, unknown>[] }> {
     const row: ViewRow | undefined = await this.knex('views').where({ id: viewId }).first();
     if (!row) throw new NotFoundException(`View ${viewId} not found`);
 
@@ -306,6 +312,7 @@ export class ViewsService {
       row.relation_ids,
       row.calculated_fields,
       row.quick_stat_fields,
+      selectedDate,
     );
     const rows = await query;
     return { headers, headerLabels, rows: rows.map(mapRow) };

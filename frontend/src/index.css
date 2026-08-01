@@ -170,9 +170,25 @@ a:hover {
 }
 
 .app-layout > nav a.account-link {
-  margin-left: auto;
+  margin-left: 16px;
   color: var(--ink-muted);
   font-size: 13px;
+}
+
+.global-date-selector {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink-secondary);
+}
+
+.global-date-selector input {
+  width: auto;
+  margin: 0;
+  font-size: 13px;
+  padding: 4px 6px;
 }
 
 .app-brand {

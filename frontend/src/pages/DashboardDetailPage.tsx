@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import type { Dashboard, SavedView, ViewData } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
+import { useDateSelection } from '../date-selection/DateSelectionContext';
 import { CHART_TYPE_OPTIONS, loadStoredChartType, storeChartType } from './chart-presentation';
 import type { ChartType } from './view-builder/suggestChartType';
 import { ViewChart } from './view-builder/ViewChart';
@@ -88,6 +89,7 @@ function EditDashboardForm({
 export function DashboardDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { session } = useAuth();
+  const { selectedDate } = useDateSelection();
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [tiles, setTiles] = useState<DashboardTileData[]>([]);
   const [presentations, setPresentations] = useState<Record<string, ChartType>>({});
@@ -95,13 +97,14 @@ export function DashboardDetailPage() {
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
-    if (!id) return;
+    if (!id || !selectedDate) return;
     try {
       const dashboardResult = await apiClient.get<Dashboard>(`/dashboards/${id}`);
       setDashboard(dashboardResult);
       const loaded = await Promise.all(
         dashboardResult.viewIds.map(async (viewId) => {
-          const [view, data] = await Promise.all([apiClient.get<SavedView>(`/views/${viewId}`), apiClient.get<ViewData>(`/views/${viewId}/data`)]);
+          const dataUrl = `/views/${viewId}/data?date=${encodeURIComponent(selectedDate)}`;
+          const [view, data] = await Promise.all([apiClient.get<SavedView>(`/views/${viewId}`), apiClient.get<ViewData>(dataUrl)]);
           return {
             view,
             rows: data.rows,
@@ -123,7 +126,7 @@ export function DashboardDetailPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, selectedDate]);
 
   function handlePresentationChange(viewId: string, chartType: ChartType) {
     if (!id) return;

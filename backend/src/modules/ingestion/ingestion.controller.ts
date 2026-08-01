@@ -35,6 +35,12 @@ export class IngestionController {
     return this.ingestionService.listJournal();
   }
 
+  /** Default value for the global date selector — see IngestionService.getLatestIngestionDate. */
+  @Get('latest-date')
+  async getLatestIngestionDate() {
+    return { date: await this.ingestionService.getLatestIngestionDate() };
+  }
+
   /** Bulk-deletes selected journal entries (e.g. duplicate imports of the same file) — history cleanup only, see the service for why this never touches actual data. */
   @Delete('journal')
   @RequirePermission('ingestion:manage')

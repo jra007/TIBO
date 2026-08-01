@@ -194,6 +194,24 @@ export class IngestionService {
     return records.length;
   }
 
+  /**
+   * The most recent UTC calendar day across every source table's ingestion history — the global
+   * date selector's default value (effectively "today" whenever today's import has already run,
+   * falling back gracefully to whatever the last real import day was otherwise).
+   */
+  async getLatestIngestionDate(): Promise<string | null> {
+    const { rows: tables } = await this.knex.raw(
+      `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name LIKE 'src\\_%' ESCAPE '\\'`,
+    );
+    let latest: string | null = null;
+    for (const { table_name: tableName } of tables as { table_name: string }[]) {
+      const row = await this.knex(tableName).max('date_ingestion as d').first();
+      const value = row?.d ? new Date(row.d as string).toISOString().slice(0, 10) : null;
+      if (value && (!latest || value > latest)) latest = value;
+    }
+    return latest;
+  }
+
   /** Cosmetic display name for a column — doesn't touch the underlying data or schema. */
   async setColumnLabel(
     tableName: string,

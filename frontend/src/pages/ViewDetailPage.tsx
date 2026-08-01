@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import type { SavedView, ViewData } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { StatusBadge, type StatusTone } from '../components/StatusBadge';
+import { useDateSelection } from '../date-selection/DateSelectionContext';
 import { CHART_TYPE_OPTIONS, loadStoredChartType, storeChartType } from './chart-presentation';
 import type { ChartType } from './view-builder/suggestChartType';
 import { ViewChart } from './view-builder/ViewChart';
@@ -27,6 +28,7 @@ function presentationStorageKey(viewId: string): string {
 export function ViewDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { session } = useAuth();
+  const { selectedDate } = useDateSelection();
   const [view, setView] = useState<SavedView | null>(null);
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [headerLabels, setHeaderLabels] = useState<Record<string, string>>({});
@@ -34,8 +36,9 @@ export function ViewDetailPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!id) return;
-    Promise.all([apiClient.get<SavedView>(`/views/${id}`), apiClient.get<ViewData>(`/views/${id}/data`)])
+    if (!id || !selectedDate) return;
+    const dataUrl = `/views/${id}/data?date=${encodeURIComponent(selectedDate)}`;
+    Promise.all([apiClient.get<SavedView>(`/views/${id}`), apiClient.get<ViewData>(dataUrl)])
       .then(([viewResult, dataResult]) => {
         setView(viewResult);
         setRows(dataResult.rows);
@@ -43,7 +46,7 @@ export function ViewDetailPage() {
         setChartType(loadStoredChartType(presentationStorageKey(id)) ?? viewResult.chartType);
       })
       .catch(() => setError('Impossible de charger cette vue.'));
-  }, [id]);
+  }, [id, selectedDate]);
 
   function handleChartTypeChange(next: ChartType) {
     if (!id) return;
