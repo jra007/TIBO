@@ -288,7 +288,31 @@ export function ViewBuilderPage() {
 
       <DndContext onDragEnd={handleDragEnd}>
         <div className="view-builder-layout">
-          <div className="fields-column">
+          <aside aria-label="Champs disponibles">
+            <h2>Champs</h2>
+            <label htmlFor="field-search" className="visually-hidden">
+              Rechercher un champ
+            </label>
+            <input
+              id="field-search"
+              type="search"
+              placeholder="Rechercher un champ…"
+              value={fieldSearch}
+              onChange={(e) => setFieldSearch(e.target.value)}
+            />
+
+            {visibleFields.map((field) => (
+              <FieldChip
+                key={field.id}
+                field={fieldById[field.id]}
+                onAddToShelf={(shelfId) => assignToShelf(field, shelfId)}
+                onRename={handleRename}
+                onEditCalculatedField={handleEditCalculatedField}
+              />
+            ))}
+            {fieldSearch && visibleFields.length === 0 && <p>Aucun champ ne correspond à « {fieldSearch} ».</p>}
+          </aside>
+          <div className="shelves-column">
             <div className="calculated-field-section">
               <div className="page-actions">
                 <button
@@ -316,43 +340,19 @@ export function ViewBuilderPage() {
               )}
             </div>
 
-            <aside aria-label="Champs disponibles">
-              <h2>Champs</h2>
-              <label htmlFor="field-search" className="visually-hidden">
-                Rechercher un champ
-              </label>
-              <input
-                id="field-search"
-                type="search"
-                placeholder="Rechercher un champ…"
-                value={fieldSearch}
-                onChange={(e) => setFieldSearch(e.target.value)}
-              />
-
-              {visibleFields.map((field) => (
-                <FieldChip
-                  key={field.id}
-                  field={fieldById[field.id]}
-                  onAddToShelf={(shelfId) => assignToShelf(field, shelfId)}
-                  onRename={handleRename}
-                  onEditCalculatedField={handleEditCalculatedField}
+            <div className="shelves">
+              {SHELVES.map((shelf) => (
+                <ShelfDropZone
+                  key={shelf.id}
+                  id={shelf.id}
+                  label={shelf.label}
+                  fields={shelves[shelf.id]}
+                  onRemove={(fieldId) => removeFromShelf(shelf.id, fieldId)}
+                  onAggregationChange={(fieldId, aggregation) => updateAggregation(shelf.id, fieldId, aggregation)}
+                  onFilterChange={updateFilter}
                 />
               ))}
-              {fieldSearch && visibleFields.length === 0 && <p>Aucun champ ne correspond à « {fieldSearch} ».</p>}
-            </aside>
-          </div>
-          <div className="shelves">
-            {SHELVES.map((shelf) => (
-              <ShelfDropZone
-                key={shelf.id}
-                id={shelf.id}
-                label={shelf.label}
-                fields={shelves[shelf.id]}
-                onRemove={(fieldId) => removeFromShelf(shelf.id, fieldId)}
-                onAggregationChange={(fieldId, aggregation) => updateAggregation(shelf.id, fieldId, aggregation)}
-                onFilterChange={updateFilter}
-              />
-            ))}
+            </div>
           </div>
           <div className="chart-preview">
             <label>
