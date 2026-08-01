@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import type { Dashboard, Group, SavedView } from '../api/types';
 
@@ -32,7 +33,9 @@ function DashboardRow({ dashboard, groups, onShared }: { dashboard: Dashboard; g
 
   return (
     <tr>
-      <td>{dashboard.name}</td>
+      <td>
+        <Link to={`/dashboards/${dashboard.id}`}>{dashboard.name}</Link>
+      </td>
       <td>{dashboard.viewIds.length}</td>
       <td>{dashboard.visibility === 'private' ? 'Privé' : `Partagé (${sharedGroupName})`}</td>
       <td>{new Date(dashboard.createdAt).toLocaleDateString('fr-FR')}</td>
@@ -179,7 +182,9 @@ export function DashboardsPage() {
           <tbody>
             {teamDashboards.map((dashboard) => (
               <tr key={dashboard.id}>
-                <td>{dashboard.name}</td>
+                <td>
+                  <Link to={`/dashboards/${dashboard.id}`}>{dashboard.name}</Link>
+                </td>
                 <td>{dashboard.viewIds.length}</td>
                 <td>{new Date(dashboard.createdAt).toLocaleDateString('fr-FR')}</td>
               </tr>

@@ -7,6 +7,7 @@ import { LoginPage } from './pages/LoginPage';
 import { AccountPage } from './pages/AccountPage';
 import { ViewsPage } from './pages/ViewsPage';
 import { ViewDetailPage } from './pages/ViewDetailPage';
+import { DashboardDetailPage } from './pages/DashboardDetailPage';
 import { DashboardsPage } from './pages/DashboardsPage';
 import { ViewBuilderPage } from './pages/view-builder/ViewBuilderPage';
 import { AdminLayout } from './pages/admin/AdminLayout';
@@ -40,6 +41,7 @@ function App() {
             <Route path="/views/:id" element={<ViewDetailPage />} />
             <Route path="/views/:id/edit" element={<ViewBuilderPage />} />
             <Route path="/dashboards" element={<DashboardsPage />} />
+            <Route path="/dashboards/:id" element={<DashboardDetailPage />} />
             <Route path="/account" element={<AccountPage />} />
             <Route
               path="/admin"
