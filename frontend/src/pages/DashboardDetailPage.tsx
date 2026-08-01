@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import type { Dashboard, SavedView, ViewData } from '../api/types';
+import { useAuth } from '../auth/AuthContext';
 import { CHART_TYPE_OPTIONS, loadStoredChartType, storeChartType } from './chart-presentation';
 import type { ChartType } from './view-builder/suggestChartType';
 import { ViewChart } from './view-builder/ViewChart';
@@ -16,37 +17,112 @@ function presentationStorageKey(dashboardId: string, viewId: string): string {
   return `tibo:dashboard-presentation:${dashboardId}:${viewId}`;
 }
 
-export function DashboardDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  const [dashboard, setDashboard] = useState<Dashboard | null>(null);
-  const [tiles, setTiles] = useState<DashboardTileData[]>([]);
-  const [presentations, setPresentations] = useState<Record<string, ChartType>>({});
+function EditDashboardForm({
+  dashboard,
+  onSaved,
+  onCancel,
+}: {
+  dashboard: Dashboard;
+  onSaved: () => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [myViews, setMyViews] = useState<SavedView[]>([]);
+  const [name, setName] = useState(dashboard.name);
+  const [selectedViewIds, setSelectedViewIds] = useState<string[]>(dashboard.viewIds);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    apiClient.get<SavedView[]>('/views/mine').then(setMyViews);
+  }, []);
+
+  function toggleView(viewId: string) {
+    setSelectedViewIds((prev) => (prev.includes(viewId) ? prev.filter((id) => id !== viewId) : [...prev, viewId]));
+  }
+
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await apiClient.put(`/dashboards/${dashboard.id}`, { name, viewIds: selectedViewIds });
+      await onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Échec de la mise à jour du tableau de bord.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="calculated-field-form">
+      <h3>Modifier le tableau de bord</h3>
+      <label htmlFor="edit-dashboard-name">Nom</label>
+      <input id="edit-dashboard-name" value={name} onChange={(e) => setName(e.target.value)} required />
+      <fieldset>
+        <legend>Vues à inclure</legend>
+        {myViews.map((view) => (
+          <label key={view.id}>
+            <input type="checkbox" checked={selectedViewIds.includes(view.id)} onChange={() => toggleView(view.id)} />
+            {view.name}
+          </label>
+        ))}
+      </fieldset>
+      {error && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
+      <div className="page-actions">
+        <button type="submit" disabled={saving || !name}>
+          {saving ? 'Enregistrement…' : 'Enregistrer'}
+        </button>
+        <button type="button" className="secondary" onClick={onCancel}>
+          Annuler
+        </button>
+      </div>
+    </form>
+  );
+}
+
+export function DashboardDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const { session } = useAuth();
+  const [dashboard, setDashboard] = useState<Dashboard | null>(null);
+  const [tiles, setTiles] = useState<DashboardTileData[]>([]);
+  const [presentations, setPresentations] = useState<Record<string, ChartType>>({});
+  const [editing, setEditing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load() {
     if (!id) return;
-    apiClient
-      .get<Dashboard>(`/dashboards/${id}`)
-      .then(async (dashboardResult) => {
-        setDashboard(dashboardResult);
-        const loaded = await Promise.all(
-          dashboardResult.viewIds.map(async (viewId) => {
-            const [view, data] = await Promise.all([apiClient.get<SavedView>(`/views/${viewId}`), apiClient.get<ViewData>(`/views/${viewId}/data`)]);
-            return {
-              view,
-              rows: data.rows,
-              headerLabels: Object.fromEntries(data.headers.map((header, i) => [header, data.headerLabels[i]])),
-            };
-          }),
-        );
-        setTiles(loaded);
-        setPresentations(
-          Object.fromEntries(
-            loaded.map((tile) => [tile.view.id, loadStoredChartType(presentationStorageKey(dashboardResult.id, tile.view.id)) ?? tile.view.chartType]),
-          ),
-        );
-      })
-      .catch(() => setError('Impossible de charger ce tableau de bord.'));
+    try {
+      const dashboardResult = await apiClient.get<Dashboard>(`/dashboards/${id}`);
+      setDashboard(dashboardResult);
+      const loaded = await Promise.all(
+        dashboardResult.viewIds.map(async (viewId) => {
+          const [view, data] = await Promise.all([apiClient.get<SavedView>(`/views/${viewId}`), apiClient.get<ViewData>(`/views/${viewId}/data`)]);
+          return {
+            view,
+            rows: data.rows,
+            headerLabels: Object.fromEntries(data.headers.map((header, i) => [header, data.headerLabels[i]])),
+          };
+        }),
+      );
+      setTiles(loaded);
+      setPresentations(
+        Object.fromEntries(
+          loaded.map((tile) => [tile.view.id, loadStoredChartType(presentationStorageKey(dashboardResult.id, tile.view.id)) ?? tile.view.chartType]),
+        ),
+      );
+    } catch {
+      setError('Impossible de charger ce tableau de bord.');
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   function handlePresentationChange(viewId: string, chartType: ChartType) {
@@ -70,7 +146,23 @@ export function DashboardDetailPage() {
       <Link to="/dashboards">← Tableaux de bord</Link>
       <div className="page-header">
         <h1>{dashboard.name}</h1>
+        {dashboard.ownerId === session?.user.id && !editing && (
+          <button type="button" onClick={() => setEditing(true)}>
+            Modifier
+          </button>
+        )}
       </div>
+
+      {editing && (
+        <EditDashboardForm
+          dashboard={dashboard}
+          onCancel={() => setEditing(false)}
+          onSaved={async () => {
+            setEditing(false);
+            await load();
+          }}
+        />
+      )}
 
       {tiles.length === 0 && <p>Ce tableau de bord ne contient aucune vue.</p>}
 

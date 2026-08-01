@@ -62,6 +62,25 @@ export class DashboardsService {
     return toDomain(row);
   }
 
+  /** Only the owner can edit their own dashboard — lets the set of included views (and the name) change after creation. */
+  async update(dashboardId: string, ownerId: string, name: string, viewIds: string[]): Promise<Dashboard> {
+    const existing: DashboardRow | undefined = await this.knex('dashboards').where({ id: dashboardId }).first();
+    if (!existing) throw new NotFoundException(`Dashboard ${dashboardId} not found`);
+    if (existing.owner_id !== ownerId) throw new ForbiddenException("Vous n'êtes pas propriétaire de ce tableau de bord");
+
+    if (viewIds.length > 0) {
+      const found = await this.knex('views').whereIn('id', viewIds).pluck('id');
+      const missing = viewIds.filter((id) => !found.includes(id));
+      if (missing.length > 0) throw new BadRequestException(`Unknown view id(s): ${missing.join(', ')}`);
+    }
+
+    const [row]: DashboardRow[] = await this.knex('dashboards')
+      .where({ id: dashboardId })
+      .update({ name, view_ids: JSON.stringify(viewIds), updated_at: new Date() })
+      .returning('*');
+    return toDomain(row);
+  }
+
   async getById(dashboardId: string): Promise<Dashboard> {
     const row: DashboardRow | undefined = await this.knex('dashboards').where({ id: dashboardId }).first();
     if (!row) throw new NotFoundException(`Dashboard ${dashboardId} not found`);
