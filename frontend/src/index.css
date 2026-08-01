@@ -272,7 +272,11 @@ label.button:hover {
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  /* auto-fit (not auto-fill): with fewer tiles than a row could hold, auto-fill still reserves
+     empty invisible tracks sized for phantom content, leaving real tiles stuck at 340px with
+     unused space to their right. auto-fit collapses those empty tracks so the real tiles
+     actually stretch to fill the row. */
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
   gap: 16px;
 }
 
