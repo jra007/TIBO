@@ -375,6 +375,27 @@ legend {
   padding: 0 6px;
 }
 
+.filter-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.filter-bar label {
+  font-size: 13px;
+  color: var(--ink-secondary);
+  margin: 0;
+}
+
+#journal-date-preset,
+#journal-date-from,
+#journal-date-to {
+  width: auto;
+  max-width: none;
+  margin: 0;
+}
+
 /* ---------- Buttons ---------- */
 
 button {

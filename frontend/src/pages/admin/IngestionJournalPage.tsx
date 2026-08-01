@@ -1,8 +1,34 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../../api/client';
 import type { JournalEntry, UploadResponse } from '../../api/types';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+
+const DATE_PRESETS = [
+  { value: 'all', label: 'Toutes les dates' },
+  { value: 'today', label: "Aujourd'hui" },
+  { value: '7d', label: '7 derniers jours' },
+  { value: '30d', label: '30 derniers jours' },
+  { value: 'custom', label: 'Période personnalisée' },
+] as const;
+
+type DatePreset = (typeof DATE_PRESETS)[number]['value'];
+
+function presetStartDate(preset: DatePreset): Date | null {
+  const now = new Date();
+  if (preset === 'today') return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (preset === '7d') {
+    const from = new Date(now);
+    from.setDate(from.getDate() - 7);
+    return from;
+  }
+  if (preset === '30d') {
+    const from = new Date(now);
+    from.setDate(from.getDate() - 30);
+    return from;
+  }
+  return null;
+}
 
 export function IngestionJournalPage() {
   const [files, setFiles] = useState<FileList | null>(null);
@@ -13,6 +39,9 @@ export function IngestionJournalPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [datePreset, setDatePreset] = useState<DatePreset>('all');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
 
   useEffect(() => {
     loadJournal();
@@ -43,12 +72,31 @@ export function IngestionJournalPage() {
     }
   }
 
+  const filteredJournal = useMemo(() => {
+    if (datePreset === 'all') return journal;
+    if (datePreset === 'custom') {
+      const from = customFrom ? new Date(customFrom) : null;
+      const to = customTo ? new Date(customTo) : null;
+      if (to) to.setHours(23, 59, 59, 999);
+      return journal.filter((entry) => {
+        const importedAt = new Date(entry.importedAt);
+        if (from && importedAt < from) return false;
+        if (to && importedAt > to) return false;
+        return true;
+      });
+    }
+    const from = presetStartDate(datePreset);
+    return journal.filter((entry) => !from || new Date(entry.importedAt) >= from);
+  }, [journal, datePreset, customFrom, customTo]);
+
   function toggleSelected(id: string) {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((existing) => existing !== id) : [...prev, id]));
   }
 
   function toggleSelectAll() {
-    setSelectedIds((prev) => (prev.length === journal.length ? [] : journal.map((entry) => entry.id)));
+    const filteredIds = filteredJournal.map((entry) => entry.id);
+    const allSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.includes(id));
+    setSelectedIds((prev) => (allSelected ? prev.filter((id) => !filteredIds.includes(id)) : [...new Set([...prev, ...filteredIds])]));
   }
 
   async function confirmDeleteSelected() {
@@ -65,6 +113,8 @@ export function IngestionJournalPage() {
       setDeleting(false);
     }
   }
+
+  const allFilteredSelected = filteredJournal.length > 0 && filteredJournal.every((entry) => selectedIds.includes(entry.id));
 
   return (
     <section>
@@ -90,6 +140,28 @@ export function IngestionJournalPage() {
         </p>
       )}
 
+      <fieldset className="filter-bar">
+        <legend>Filtrer par date</legend>
+        <label htmlFor="journal-date-preset" className="visually-hidden">
+          Période
+        </label>
+        <select id="journal-date-preset" value={datePreset} onChange={(e) => setDatePreset(e.target.value as DatePreset)}>
+          {DATE_PRESETS.map((preset) => (
+            <option key={preset.value} value={preset.value}>
+              {preset.label}
+            </option>
+          ))}
+        </select>
+        {datePreset === 'custom' && (
+          <>
+            <label htmlFor="journal-date-from">Du</label>
+            <input id="journal-date-from" type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+            <label htmlFor="journal-date-to">Au</label>
+            <input id="journal-date-to" type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+          </>
+        )}
+      </fieldset>
+
       <div className="page-actions">
         <button type="button" className="danger" disabled={selectedIds.length === 0 || deleting} onClick={() => setShowConfirmDelete(true)}>
           Supprimer la sélection ({selectedIds.length})
@@ -114,12 +186,7 @@ export function IngestionJournalPage() {
               <label className="visually-hidden" htmlFor="select-all-journal">
                 Tout sélectionner
               </label>
-              <input
-                id="select-all-journal"
-                type="checkbox"
-                checked={journal.length > 0 && selectedIds.length === journal.length}
-                onChange={toggleSelectAll}
-              />
+              <input id="select-all-journal" type="checkbox" checked={allFilteredSelected} onChange={toggleSelectAll} />
             </th>
             <th scope="col">Date</th>
             <th scope="col">Fichier</th>
@@ -130,7 +197,7 @@ export function IngestionJournalPage() {
           </tr>
         </thead>
         <tbody>
-          {journal.map((entry) => (
+          {filteredJournal.map((entry) => (
             <tr key={entry.id}>
               <td>
                 <label className="visually-hidden" htmlFor={`select-${entry.id}`}>
@@ -146,9 +213,9 @@ export function IngestionJournalPage() {
               <td>{entry.errors.join(', ')}</td>
             </tr>
           ))}
-          {journal.length === 0 && (
+          {filteredJournal.length === 0 && (
             <tr>
-              <td colSpan={7}>Aucun import pour le moment.</td>
+              <td colSpan={7}>{journal.length === 0 ? 'Aucun import pour le moment.' : 'Aucun import ne correspond à cette période.'}</td>
             </tr>
           )}
         </tbody>
