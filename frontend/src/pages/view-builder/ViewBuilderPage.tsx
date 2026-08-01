@@ -287,6 +287,33 @@ export function ViewBuilderPage() {
       )}
 
       <DndContext onDragEnd={handleDragEnd}>
+        <div className="calculated-field-section">
+          <div className="page-actions">
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                setSimpleCondition(emptySimpleCondition());
+                setEditingCalculatedField('new');
+              }}
+            >
+              + Champ calculé
+            </button>
+          </div>
+
+          {editingCalculatedField && (
+            <CalculatedFieldEditor
+              availableFields={schemaFields}
+              editing={editingCalculatedField === 'new' ? null : editingCalculatedField}
+              simpleCondition={simpleCondition}
+              onSimpleConditionChange={setSimpleCondition}
+              onSave={handleSaveCalculatedField}
+              onDelete={handleDeleteCalculatedField}
+              onCancel={() => setEditingCalculatedField(null)}
+            />
+          )}
+        </div>
+
         <div className="view-builder-layout">
           <aside aria-label="Champs disponibles">
             <h2>Champs</h2>
@@ -300,31 +327,6 @@ export function ViewBuilderPage() {
               value={fieldSearch}
               onChange={(e) => setFieldSearch(e.target.value)}
             />
-
-            <div className="page-actions">
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => {
-                  setSimpleCondition(emptySimpleCondition());
-                  setEditingCalculatedField('new');
-                }}
-              >
-                + Champ calculé
-              </button>
-            </div>
-
-            {editingCalculatedField && (
-              <CalculatedFieldEditor
-                availableFields={schemaFields}
-                editing={editingCalculatedField === 'new' ? null : editingCalculatedField}
-                simpleCondition={simpleCondition}
-                onSimpleConditionChange={setSimpleCondition}
-                onSave={handleSaveCalculatedField}
-                onDelete={handleDeleteCalculatedField}
-                onCancel={() => setEditingCalculatedField(null)}
-              />
-            )}
 
             {visibleFields.map((field) => (
               <FieldChip

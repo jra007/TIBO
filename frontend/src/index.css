@@ -763,6 +763,10 @@ tbody tr:hover {
 
 /* ---------- View builder ---------- */
 
+.calculated-field-section {
+  margin-bottom: 20px;
+}
+
 .view-builder-layout {
   display: grid;
   grid-template-columns: 220px 1fr 260px;
@@ -857,18 +861,27 @@ tbody tr:hover {
 
 .simple-condition-builder {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 12px;
 }
 
 .calculated-field-form .simple-condition-keyword {
-  margin: 6px 0 0;
+  margin: 0;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--ink-muted);
+}
+
+.calculated-field-form .simple-condition-builder select,
+.calculated-field-form .simple-condition-builder input {
+  width: auto;
+  max-width: 160px;
+  margin: 0;
 }
 
 .condition-field-slot {
