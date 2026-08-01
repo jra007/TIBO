@@ -1,6 +1,6 @@
 import type { Knex } from 'knex';
 import { getLabelsMap } from './column-labels';
-import type { Aggregation, ShelfDefinition } from './views.service';
+import type { Aggregation, FilterCondition, ShelfDefinition } from './views.service';
 
 interface RelationRow {
   source_table: string;
@@ -30,14 +30,42 @@ function dedupeFields(fields: ShelfDefinition['rows']): ShelfDefinition['rows'] 
   return result;
 }
 
+/** Ignores a filter missing what it needs (no operator/value yet, or no second value for 'between') rather than erroring — lets a half-filled filter sit on the shelf without breaking the view. */
+function applyFilter(query: Knex.QueryBuilder, filter: FilterCondition): Knex.QueryBuilder {
+  const column = `${filter.tableName}.${filter.columnName}`;
+  if (filter.value == null || filter.value === '') return query;
+
+  switch (filter.operator) {
+    case 'eq':
+      return query.where(column, '=', filter.value);
+    case 'neq':
+      return query.where(column, '!=', filter.value);
+    case 'gt':
+      return query.where(column, '>', filter.value);
+    case 'gte':
+      return query.where(column, '>=', filter.value);
+    case 'lt':
+      return query.where(column, '<', filter.value);
+    case 'lte':
+      return query.where(column, '<=', filter.value);
+    case 'contains':
+      return query.whereILike(column, `%${filter.value}%`);
+    case 'between':
+      return filter.value2 == null || filter.value2 === '' ? query : query.whereBetween(column, [filter.value, filter.value2]);
+    default:
+      return query;
+  }
+}
+
 /**
  * Builds the query for "the underlying data of a view": the columns placed in
  * rows/columns/color/size, joined across tables via the relations pinned on the view at creation
  * time (ViewsService.pinRelationsForTablePairs). Fields with an `aggregation` set (numeric
  * measures, per spec 3.1.3) are summed/averaged/etc. and GROUP BY the remaining (dimension)
  * fields; if no field has an aggregation, this is a plain projection of raw rows — that's still
- * the common case for a 'table' chart type. The `filters` shelf has no stored values/operators
- * yet, so it's excluded here too.
+ * the common case for a 'table' chart type. The `filters` shelf is applied as WHERE conditions
+ * (before any grouping), and can reference a table not otherwise displayed — its table still
+ * needs joining, so it's folded into the join-walk below alongside the displayed fields'.
  *
  * SQL aliases are synthetic (col_0, col_1, ...), not "table.column" strings: knex's identifier
  * quoting (`??`) splits on '.' to address table.column pairs, so a "table.column"-shaped alias
@@ -57,7 +85,7 @@ export async function buildViewDataQuery(
   const fields = dedupeFields([...shelves.rows, ...shelves.columns, ...shelves.color, ...shelves.size]);
   if (fields.length === 0) throw new Error('Cette vue ne contient aucun champ à afficher');
 
-  const tables = [...new Set(fields.map((f) => f.tableName))];
+  const tables = [...new Set([...fields, ...shelves.filters].map((f) => f.tableName))];
   const relations: RelationRow[] = relationIds.length > 0 ? await knex('detected_relations').whereIn('id', relationIds) : [];
 
   let query = knex(tables[0]);
@@ -82,6 +110,8 @@ export async function buildViewDataQuery(
     joined.add(table);
     remaining.splice(nextIndex, 1);
   }
+
+  for (const filter of shelves.filters) query = applyFilter(query, filter);
 
   const headers = fields.map((f) => `${f.tableName}.${f.columnName}`);
   const labelsMap = await getLabelsMap(knex, fields);

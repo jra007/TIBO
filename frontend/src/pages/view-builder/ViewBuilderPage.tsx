@@ -2,10 +2,10 @@ import { DndContext, type DragEndEvent } from '@dnd-kit/core';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { apiClient } from '../../api/client';
-import type { SavedView, TableSchema } from '../../api/types';
+import type { FilterCondition, SavedView, TableSchema } from '../../api/types';
 import { FieldChip } from './FieldChip';
 import { ShelfDropZone } from './ShelfDropZone';
-import { emptyShelfAssignment, SHELVES, type Aggregation, type Field, type ShelfAssignment, type ShelfId } from './shelves';
+import { defaultFilterValue, emptyShelfAssignment, SHELVES, type Aggregation, type Field, type FilterValue, type ShelfAssignment, type ShelfId } from './shelves';
 import { suggestChartType, type ChartType } from './suggestChartType';
 
 function schemasToFields(schemas: TableSchema[]): Field[] {
@@ -29,6 +29,18 @@ function fieldRefToField(ref: { tableName: string; columnName: string; aggregati
     dtype: match?.dtype ?? 'text',
     label: match?.label ?? null,
     aggregation: ref.aggregation,
+  };
+}
+
+function filterConditionToField(condition: FilterCondition, availableFields: Field[]): Field {
+  const match = availableFields.find((f) => f.tableName === condition.tableName && f.columnName === condition.columnName);
+  return {
+    id: `${condition.tableName}.${condition.columnName}`,
+    tableName: condition.tableName,
+    columnName: condition.columnName,
+    dtype: match?.dtype ?? 'text',
+    label: match?.label ?? null,
+    filter: { operator: condition.operator, value: condition.value ?? '', value2: condition.value2 ?? undefined },
   };
 }
 
@@ -63,7 +75,7 @@ export function ViewBuilderPage() {
           columns: view.shelves.columns.map((f) => fieldRefToField(f, availableFields)),
           color: view.shelves.color.map((f) => fieldRefToField(f, availableFields)),
           size: view.shelves.size.map((f) => fieldRefToField(f, availableFields)),
-          filters: view.shelves.filters.map((f) => fieldRefToField(f, availableFields)),
+          filters: view.shelves.filters.map((f) => filterConditionToField(f, availableFields)),
         });
       })
       .catch(() => setError('Impossible de charger cette vue.'))
@@ -79,6 +91,11 @@ export function ViewBuilderPage() {
   const hasAnyField = Object.values(shelves).some((fields) => fields.length > 0);
 
   function assignToShelf(field: Field, shelfId: ShelfId) {
+    if (shelfId === 'filters') {
+      const placedField: Field = { ...field, aggregation: undefined, filter: field.filter ?? defaultFilterValue(field.dtype) };
+      setShelves((prev) => ({ ...prev, filters: [...prev.filters, placedField] }));
+      return;
+    }
     // Numeric fields default to summed measures (spec 3.1.3's standard aggregations); switchable
     // per-field once placed, including back to "no aggregation" for numeric fields used as dimensions.
     const placedField = field.dtype === 'numeric' ? { ...field, aggregation: field.aggregation ?? ('sum' as Aggregation) } : field;
@@ -93,6 +110,13 @@ export function ViewBuilderPage() {
     setShelves((prev) => ({
       ...prev,
       [shelfId]: prev[shelfId].map((f) => (f.id === fieldId ? { ...f, aggregation } : f)),
+    }));
+  }
+
+  function updateFilter(fieldId: string, filter: FilterValue) {
+    setShelves((prev) => ({
+      ...prev,
+      filters: prev.filters.map((f) => (f.id === fieldId ? { ...f, filter } : f)),
     }));
   }
 
@@ -123,6 +147,14 @@ export function ViewBuilderPage() {
     setError(null);
     try {
       const stripId = (fields: Field[]) => fields.map(({ tableName, columnName, aggregation }) => ({ tableName, columnName, aggregation }));
+      const stripFilterId = (fields: Field[]): FilterCondition[] =>
+        fields.map(({ tableName, columnName, filter }) => ({
+          tableName,
+          columnName,
+          operator: filter?.operator ?? 'eq',
+          value: filter?.value ?? null,
+          value2: filter?.value2 ?? null,
+        }));
       const payload = {
         name,
         chartType: activeChartType,
@@ -131,7 +163,7 @@ export function ViewBuilderPage() {
           columns: stripId(shelves.columns),
           color: stripId(shelves.color),
           size: stripId(shelves.size),
-          filters: stripId(shelves.filters),
+          filters: stripFilterId(shelves.filters),
         },
       };
       if (isEditing) {
@@ -188,6 +220,7 @@ export function ViewBuilderPage() {
                 fields={shelves[shelf.id]}
                 onRemove={(fieldId) => removeFromShelf(shelf.id, fieldId)}
                 onAggregationChange={(fieldId, aggregation) => updateAggregation(shelf.id, fieldId, aggregation)}
+                onFilterChange={updateFilter}
               />
             ))}
           </div>

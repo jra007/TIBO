@@ -55,12 +55,22 @@ export interface FieldRef {
   aggregation?: Aggregation;
 }
 
+export type FilterOperator = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'contains' | 'between';
+
+export interface FilterCondition {
+  tableName: string;
+  columnName: string;
+  operator: FilterOperator;
+  value: string | null;
+  value2?: string | null;
+}
+
 export interface ShelfDefinition {
   rows: FieldRef[];
   columns: FieldRef[];
   color: FieldRef[];
   size: FieldRef[];
-  filters: FieldRef[];
+  filters: FilterCondition[];
 }
 
 export interface ViewData {

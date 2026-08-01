@@ -782,6 +782,14 @@ tbody tr:hover {
   margin: 0;
   font-size: 12px;
   font-weight: 400;
+  flex-wrap: wrap;
+}
+
+.shelf-drop-zone .filter-field select,
+.shelf-drop-zone .filter-field input {
+  width: auto;
+  max-width: 110px;
+  margin: 0;
 }
 
 .chart-preview {
