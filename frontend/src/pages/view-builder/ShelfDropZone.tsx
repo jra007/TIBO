@@ -1,5 +1,5 @@
 import { useDroppable } from '@dnd-kit/core';
-import { displayLabel, OPERATOR_LABELS, operatorsForDtype, type Aggregation, type Field, type FilterValue, type ShelfId } from './shelves';
+import { displayLabel, OPERATOR_LABELS, operatorsForDtype, valueInputType, type Aggregation, type Field, type FilterValue, type ShelfId } from './shelves';
 
 const AGGREGATION_LABELS: Record<Aggregation, string> = {
   sum: 'Somme',
@@ -8,12 +8,6 @@ const AGGREGATION_LABELS: Record<Aggregation, string> = {
   min: 'Min',
   max: 'Max',
 };
-
-function valueInputType(dtype: Field['dtype']): 'date' | 'number' | 'text' {
-  if (dtype === 'date') return 'date';
-  if (dtype === 'numeric') return 'number';
-  return 'text';
-}
 
 function FilterControls({ field, onFilterChange }: { field: Field; onFilterChange: (fieldId: string, filter: FilterValue) => void }) {
   const filter = field.filter ?? { operator: operatorsForDtype(field.dtype)[0], value: '' };

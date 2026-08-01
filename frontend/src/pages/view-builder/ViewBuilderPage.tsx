@@ -17,6 +17,7 @@ import {
   type ShelfAssignment,
   type ShelfId,
 } from './shelves';
+import { CONDITION_FIELD_DROP_ID, emptySimpleCondition, type SimpleCondition } from './simple-condition';
 import { suggestChartType, type ChartType } from './suggestChartType';
 
 function schemasToFields(schemas: TableSchema[]): Field[] {
@@ -72,6 +73,7 @@ export function ViewBuilderPage() {
   const [schemaFields, setSchemaFields] = useState<Field[]>([]);
   const [calculatedFields, setCalculatedFields] = useState<CalculatedField[]>([]);
   const [editingCalculatedField, setEditingCalculatedField] = useState<'new' | CalculatedField | null>(null);
+  const [simpleCondition, setSimpleCondition] = useState<SimpleCondition>(emptySimpleCondition());
   const [fieldSearch, setFieldSearch] = useState('');
   const [shelves, setShelves] = useState<ShelfAssignment>(emptyShelfAssignment);
   const [manualChartType, setManualChartType] = useState<ChartType | null>(null);
@@ -177,7 +179,10 @@ export function ViewBuilderPage() {
 
   function handleEditCalculatedField(field: Field) {
     const existing = calculatedFields.find((f) => f.id === field.columnName);
-    if (existing) setEditingCalculatedField(existing);
+    if (existing) {
+      setSimpleCondition(emptySimpleCondition());
+      setEditingCalculatedField(existing);
+    }
   }
 
   function handleSaveCalculatedField(field: CalculatedField) {
@@ -209,8 +214,14 @@ export function ViewBuilderPage() {
 
   function handleDragEnd(event: DragEndEvent) {
     const field = event.active.data.current?.field as Field | undefined;
-    const shelfId = event.over?.id as ShelfId | undefined;
-    if (field && shelfId) assignToShelf(field, shelfId);
+    const overId = event.over?.id as string | undefined;
+    if (!field || !overId) return;
+
+    if (overId === CONDITION_FIELD_DROP_ID) {
+      setSimpleCondition((prev) => ({ ...prev, fieldId: field.id }));
+      return;
+    }
+    assignToShelf(field, overId as ShelfId);
   }
 
   async function handleSave() {
@@ -291,7 +302,14 @@ export function ViewBuilderPage() {
             />
 
             <div className="page-actions">
-              <button type="button" className="secondary" onClick={() => setEditingCalculatedField('new')}>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  setSimpleCondition(emptySimpleCondition());
+                  setEditingCalculatedField('new');
+                }}
+              >
                 + Champ calculé
               </button>
             </div>
@@ -300,6 +318,8 @@ export function ViewBuilderPage() {
               <CalculatedFieldEditor
                 availableFields={schemaFields}
                 editing={editingCalculatedField === 'new' ? null : editingCalculatedField}
+                simpleCondition={simpleCondition}
+                onSimpleConditionChange={setSimpleCondition}
                 onSave={handleSaveCalculatedField}
                 onDelete={handleDeleteCalculatedField}
                 onCancel={() => setEditingCalculatedField(null)}

@@ -41,6 +41,13 @@ export function defaultFilterValue(dtype: ColumnType): FilterValue {
   return { operator: operatorsForDtype(dtype)[0], value: '' };
 }
 
+/** Which HTML input type reads best for a column's type — shared by the filter shelf and the calculated-field condition builder. */
+export function valueInputType(dtype: ColumnType): 'date' | 'number' | 'text' {
+  if (dtype === 'date') return 'date';
+  if (dtype === 'numeric') return 'number';
+  return 'text';
+}
+
 export interface Field {
   id: string;
   tableName: string;

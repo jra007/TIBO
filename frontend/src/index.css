@@ -855,6 +855,58 @@ tbody tr:hover {
   color: var(--ink-secondary);
 }
 
+.simple-condition-builder {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.calculated-field-form .simple-condition-keyword {
+  margin: 6px 0 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+}
+
+.condition-field-slot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 20px;
+  padding: 8px 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 13px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.condition-field-slot[data-over='true'] {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.condition-field-slot-placeholder {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.condition-field-slot button {
+  background: transparent;
+  color: var(--ink-muted);
+  padding: 0 4px;
+  margin: 0;
+}
+
+.condition-field-slot button:hover:not(:disabled) {
+  color: var(--critical);
+  background: transparent;
+}
+
 .shelf-drop-zone {
   min-height: 60px;
   transition: border-color 0.15s, background 0.15s;
