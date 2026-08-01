@@ -13,6 +13,7 @@ const PERMISSION_LABELS: Record<Permission, string> = {
   'settings:retention:edit': 'Modifier la rétention',
   'settings:rbac:edit': 'Gérer les rôles et permissions',
   'settings:reset:execute': 'Réinitialiser toutes les données',
+  'ingestion:manage': "Supprimer l'historique d'ingestion",
 };
 
 export function RbacPage() {
@@ -96,6 +97,7 @@ export function RbacPage() {
           <tr>
             <th scope="col">Nom</th>
             <th scope="col">Description</th>
+            <th scope="col">Créé le</th>
           </tr>
         </thead>
         <tbody>
@@ -103,6 +105,7 @@ export function RbacPage() {
             <tr key={role.id}>
               <td>{role.name}</td>
               <td>{role.description}</td>
+              <td>{new Date(role.createdAt).toLocaleDateString('fr-FR')}</td>
             </tr>
           ))}
         </tbody>

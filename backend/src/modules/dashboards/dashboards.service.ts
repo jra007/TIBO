@@ -11,6 +11,7 @@ export interface Dashboard {
   layout: unknown;
   visibility: ViewVisibility;
   sharedWithGroupId: string | null;
+  createdAt: Date;
 }
 
 interface DashboardRow {
@@ -21,6 +22,7 @@ interface DashboardRow {
   layout: unknown;
   visibility: ViewVisibility;
   shared_with_group_id: string | null;
+  created_at: Date;
 }
 
 function toDomain(row: DashboardRow): Dashboard {
@@ -32,6 +34,7 @@ function toDomain(row: DashboardRow): Dashboard {
     layout: row.layout,
     visibility: row.visibility,
     sharedWithGroupId: row.shared_with_group_id,
+    createdAt: row.created_at,
   };
 }
 

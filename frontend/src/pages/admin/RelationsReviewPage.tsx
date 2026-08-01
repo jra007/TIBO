@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from '../../api/client';
 import type { DetectedRelation } from '../../api/types';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { StatusBadge, type StatusTone } from '../../components/StatusBadge';
 
 const STATUS_LABELS: Record<DetectedRelation['status'], string> = {
@@ -19,6 +20,7 @@ export function RelationsReviewPage() {
   const [relations, setRelations] = useState<DetectedRelation[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<'proposed' | 'all' | null>(null);
 
   async function refresh() {
     setLoading(true);
@@ -53,7 +55,8 @@ export function RelationsReviewPage() {
     await refresh();
   }
 
-  async function deleteProposed() {
+  async function confirmDeleteProposed() {
+    setConfirmAction(null);
     setLoading(true);
     setError(null);
     try {
@@ -66,8 +69,8 @@ export function RelationsReviewPage() {
     }
   }
 
-  async function deleteAll() {
-    if (!window.confirm('Supprimer TOUTES les relations, y compris celles déjà validées ou rejetées ? Cette action est irréversible.')) return;
+  async function confirmDeleteAll() {
+    setConfirmAction(null);
     setLoading(true);
     setError(null);
     try {
@@ -87,13 +90,32 @@ export function RelationsReviewPage() {
         <button type="button" onClick={detect} disabled={loading}>
           Relancer la détection
         </button>
-        <button type="button" onClick={deleteProposed} disabled={loading}>
+        <button type="button" onClick={() => setConfirmAction('proposed')} disabled={loading}>
           Supprimer les propositions
         </button>
-        <button type="button" className="danger" onClick={deleteAll} disabled={loading}>
+        <button type="button" className="danger" onClick={() => setConfirmAction('all')} disabled={loading}>
           Tout supprimer
         </button>
       </div>
+
+      <ConfirmDialog
+        open={confirmAction === 'proposed'}
+        title="Supprimer les propositions"
+        message="Supprimer toutes les relations encore proposées (non validées, non rejetées) ? Elles pourront être régénérées en relançant la détection."
+        confirmLabel="Supprimer les propositions"
+        tone="danger"
+        onConfirm={confirmDeleteProposed}
+        onCancel={() => setConfirmAction(null)}
+      />
+      <ConfirmDialog
+        open={confirmAction === 'all'}
+        title="Tout supprimer"
+        message="Supprimer TOUTES les relations, y compris celles déjà validées ou rejetées ? Cette action est irréversible."
+        confirmLabel="Tout supprimer"
+        tone="danger"
+        onConfirm={confirmDeleteAll}
+        onCancel={() => setConfirmAction(null)}
+      />
 
       {error && (
         <p role="alert" className="error">

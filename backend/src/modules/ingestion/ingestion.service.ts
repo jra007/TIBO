@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../../database/database.constants';
+import { AuditService } from '../audit/audit.service';
 import { setLabel } from '../views/column-labels';
 import { inferColumnTypes, normalizeColumnName, normalizeTableName, normalizeValue, parseSpreadsheet } from './parsing';
 
@@ -31,7 +32,10 @@ const BATCH_SIZE = 500;
 export class IngestionService {
   private readonly logger = new Logger(IngestionService.name);
 
-  constructor(@Inject(KNEX_CONNECTION) private readonly knex: Knex) {}
+  constructor(
+    @Inject(KNEX_CONNECTION) private readonly knex: Knex,
+    private readonly auditService: AuditService,
+  ) {}
 
   async ingestFile(fileName: string, buffer: Buffer): Promise<IngestionResult> {
     const fileHash = createHash('sha256').update(buffer).digest('hex');
@@ -110,6 +114,20 @@ export class IngestionService {
       errors: row.errors,
       importedAt: row.imported_at,
     }));
+  }
+
+  /**
+   * Deletes selected journal entries only — never touches the actual src_* tables. Each import
+   * overwrites its target table wholesale (see loadIntoTable), so an older journal row for a
+   * file re-imported since doesn't correspond to any live data anyway; this is purely history
+   * hygiene (e.g. clearing duplicate entries from a file uploaded twice by mistake).
+   * journal_ingestion carries a 5-year retention policy (spec 6bis) — this bypasses it the same
+   * deliberate, audited way relation bulk-delete bypasses the rejected-relations retention.
+   */
+  async deleteJournalEntries(ids: string[], actorUserId: string): Promise<{ deletedCount: number }> {
+    const deletedCount = await this.knex('ingestion_journal').whereIn('id', ids).delete();
+    await this.auditService.record({ actorUserId, action: 'ingestion.journal.delete_entries', target: 'ingestion_journal', after: { ids, deletedCount } });
+    return { deletedCount };
   }
 
   private async writeJournalEntry(result: IngestionResult, fileHash: string): Promise<void> {

@@ -35,6 +35,7 @@ function DashboardRow({ dashboard, groups, onShared }: { dashboard: Dashboard; g
       <td>{dashboard.name}</td>
       <td>{dashboard.viewIds.length}</td>
       <td>{dashboard.visibility === 'private' ? 'Privé' : `Partagé (${sharedGroupName})`}</td>
+      <td>{new Date(dashboard.createdAt).toLocaleDateString('fr-FR')}</td>
       <td>
         <label htmlFor={`share-group-${dashboard.id}`} className="visually-hidden">
           Partager {dashboard.name} avec un groupe
@@ -140,6 +141,7 @@ export function DashboardsPage() {
             <th scope="col">Nom</th>
             <th scope="col">Nombre de vues</th>
             <th scope="col">Visibilité</th>
+            <th scope="col">Créé le</th>
             <th scope="col">Actions</th>
           </tr>
         </thead>
@@ -171,6 +173,7 @@ export function DashboardsPage() {
             <tr>
               <th scope="col">Nom</th>
               <th scope="col">Nombre de vues</th>
+              <th scope="col">Créé le</th>
             </tr>
           </thead>
           <tbody>
@@ -178,6 +181,7 @@ export function DashboardsPage() {
               <tr key={dashboard.id}>
                 <td>{dashboard.name}</td>
                 <td>{dashboard.viewIds.length}</td>
+                <td>{new Date(dashboard.createdAt).toLocaleDateString('fr-FR')}</td>
               </tr>
             ))}
           </tbody>

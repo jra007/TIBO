@@ -78,6 +78,7 @@ export interface SavedView {
   visibility: ViewVisibility;
   sharedWithGroupId: string | null;
   relationStatus: ViewRelationStatus;
+  createdAt: string;
 }
 
 export interface Dashboard {
@@ -88,18 +89,21 @@ export interface Dashboard {
   layout: unknown;
   visibility: ViewVisibility;
   sharedWithGroupId: string | null;
+  createdAt: string;
 }
 
 export interface Group {
   id: string;
   name: string;
   description: string;
+  createdAt: string;
 }
 
 export interface Role {
   id: string;
   name: string;
   description: string | null;
+  createdAt: string;
 }
 
 export interface AdminUser {
@@ -119,6 +123,7 @@ export const PERMISSIONS = [
   'settings:retention:edit',
   'settings:rbac:edit',
   'settings:reset:execute',
+  'ingestion:manage',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

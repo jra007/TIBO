@@ -33,6 +33,7 @@ function GroupRow({ group, users, roles, onChanged }: { group: Group; users: Adm
     <tr>
       <td>{group.name}</td>
       <td>{group.description}</td>
+      <td>{new Date(group.createdAt).toLocaleDateString('fr-FR')}</td>
       <td>
         <label htmlFor={`member-${group.id}`}>Ajouter un membre</label>
         <select id={`member-${group.id}`} value={memberId} onChange={(e) => setMemberId(e.target.value)}>
@@ -124,6 +125,7 @@ export function GroupsPage() {
           <tr>
             <th scope="col">Nom</th>
             <th scope="col">Description</th>
+            <th scope="col">Créé le</th>
             <th scope="col">Membres</th>
             <th scope="col">Rôles</th>
           </tr>

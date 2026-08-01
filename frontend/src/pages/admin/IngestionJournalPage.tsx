@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../../api/client';
 import type { JournalEntry, UploadResponse } from '../../api/types';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 
 export function IngestionJournalPage() {
   const [files, setFiles] = useState<FileList | null>(null);
@@ -9,6 +10,9 @@ export function IngestionJournalPage() {
   const [result, setResult] = useState<UploadResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [journal, setJournal] = useState<JournalEntry[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     loadJournal();
@@ -39,6 +43,29 @@ export function IngestionJournalPage() {
     }
   }
 
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((existing) => existing !== id) : [...prev, id]));
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) => (prev.length === journal.length ? [] : journal.map((entry) => entry.id)));
+  }
+
+  async function confirmDeleteSelected() {
+    setShowConfirmDelete(false);
+    setDeleting(true);
+    setError(null);
+    try {
+      await apiClient.delete('/ingestion/journal', { ids: selectedIds });
+      setSelectedIds([]);
+      await loadJournal();
+    } catch {
+      setError("Échec de la suppression de l'historique sélectionné.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <section>
       <h2>Journal d'ingestion</h2>
@@ -63,10 +90,37 @@ export function IngestionJournalPage() {
         </p>
       )}
 
+      <div className="page-actions">
+        <button type="button" className="danger" disabled={selectedIds.length === 0 || deleting} onClick={() => setShowConfirmDelete(true)}>
+          Supprimer la sélection ({selectedIds.length})
+        </button>
+      </div>
+
+      <ConfirmDialog
+        open={showConfirmDelete}
+        title="Supprimer l'historique sélectionné"
+        message={`Supprimer ${selectedIds.length} entrée(s) du journal d'ingestion ? Cela ne supprime aucune donnée déjà importée (chaque import remplace intégralement la table précédente) — uniquement l'historique.`}
+        confirmLabel="Supprimer"
+        tone="danger"
+        onConfirm={confirmDeleteSelected}
+        onCancel={() => setShowConfirmDelete(false)}
+      />
+
       <table>
         <caption>Historique des imports</caption>
         <thead>
           <tr>
+            <th scope="col">
+              <label className="visually-hidden" htmlFor="select-all-journal">
+                Tout sélectionner
+              </label>
+              <input
+                id="select-all-journal"
+                type="checkbox"
+                checked={journal.length > 0 && selectedIds.length === journal.length}
+                onChange={toggleSelectAll}
+              />
+            </th>
             <th scope="col">Date</th>
             <th scope="col">Fichier</th>
             <th scope="col">Table</th>
@@ -78,6 +132,12 @@ export function IngestionJournalPage() {
         <tbody>
           {journal.map((entry) => (
             <tr key={entry.id}>
+              <td>
+                <label className="visually-hidden" htmlFor={`select-${entry.id}`}>
+                  Sélectionner l'import {entry.fileName} du {new Date(entry.importedAt).toLocaleString('fr-FR')}
+                </label>
+                <input id={`select-${entry.id}`} type="checkbox" checked={selectedIds.includes(entry.id)} onChange={() => toggleSelected(entry.id)} />
+              </td>
               <td>{new Date(entry.importedAt).toLocaleString('fr-FR')}</td>
               <td>{entry.fileName}</td>
               <td>{entry.tableName}</td>
@@ -88,7 +148,7 @@ export function IngestionJournalPage() {
           ))}
           {journal.length === 0 && (
             <tr>
-              <td colSpan={6}>Aucun import pour le moment.</td>
+              <td colSpan={7}>Aucun import pour le moment.</td>
             </tr>
           )}
         </tbody>

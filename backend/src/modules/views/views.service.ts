@@ -33,6 +33,7 @@ export interface SavedView {
   visibility: ViewVisibility;
   sharedWithGroupId: string | null;
   relationStatus: ViewRelationStatus;
+  createdAt: Date;
 }
 
 export interface CreateViewInput {
@@ -51,6 +52,7 @@ interface ViewRow {
   relation_ids: string[];
   visibility: ViewVisibility;
   shared_with_group_id: string | null;
+  created_at: Date;
 }
 
 @Injectable()
@@ -188,6 +190,7 @@ export class ViewsService {
       visibility: row.visibility,
       sharedWithGroupId: row.shared_with_group_id,
       relationStatus: await this.computeRelationStatus(row.tables_used, row.relation_ids),
+      createdAt: row.created_at,
     };
   }
 

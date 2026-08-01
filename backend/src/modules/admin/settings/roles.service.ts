@@ -7,6 +7,18 @@ export interface Role {
   id: string;
   name: string;
   description: string | null;
+  createdAt: Date;
+}
+
+interface RoleRow {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: Date;
+}
+
+function toDomain(row: RoleRow): Role {
+  return { id: row.id, name: row.name, description: row.description, createdAt: row.created_at };
 }
 
 @Injectable()
@@ -14,15 +26,16 @@ export class RolesService {
   constructor(@Inject(KNEX_CONNECTION) private readonly knex: Knex) {}
 
   async create(name: string, description: string | undefined, permissions: Permission[]): Promise<Role> {
-    const [role] = await this.knex('roles').insert({ name, description }).returning('*');
+    const [role]: RoleRow[] = await this.knex('roles').insert({ name, description }).returning('*');
     if (permissions.length > 0) {
       await this.knex('role_permission').insert(permissions.map((permission) => ({ role_id: role.id, permission })));
     }
-    return role;
+    return toDomain(role);
   }
 
   async list(): Promise<Role[]> {
-    return this.knex('roles').select('*').orderBy('name');
+    const rows: RoleRow[] = await this.knex('roles').select('*').orderBy('name');
+    return rows.map(toDomain);
   }
 
   /** Assigns a role directly to an individual user, independent of any group membership. */

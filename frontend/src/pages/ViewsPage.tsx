@@ -84,6 +84,7 @@ function ViewRow({ view, groups, onShared }: { view: SavedView; groups: Group[];
       <td>
         <RelationStatusBadge status={view.relationStatus} />
       </td>
+      <td>{new Date(view.createdAt).toLocaleDateString('fr-FR')}</td>
       <td>
         <Link to={`/views/${view.id}/edit`} className="button">
           Modifier
@@ -171,6 +172,7 @@ export function ViewsPage() {
             <th scope="col">Type</th>
             <th scope="col">Visibilité</th>
             <th scope="col">Statut</th>
+            <th scope="col">Créée le</th>
             <th scope="col">Actions</th>
           </tr>
         </thead>
@@ -204,6 +206,7 @@ export function ViewsPage() {
               <th scope="col">Nom</th>
               <th scope="col">Type</th>
               <th scope="col">Statut</th>
+              <th scope="col">Créée le</th>
             </tr>
           </thead>
           <tbody>
@@ -216,6 +219,7 @@ export function ViewsPage() {
                 <td>
                   <RelationStatusBadge status={view.relationStatus} />
                 </td>
+                <td>{new Date(view.createdAt).toLocaleDateString('fr-FR')}</td>
               </tr>
             ))}
           </tbody>

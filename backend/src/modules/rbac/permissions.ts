@@ -9,6 +9,7 @@ export const PERMISSIONS = [
   'settings:retention:edit',
   'settings:rbac:edit',
   'settings:reset:execute',
+  'ingestion:manage',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

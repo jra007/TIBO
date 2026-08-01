@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { apiClient } from '../../api/client';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 
 interface ResetSummary {
   droppedTables: string[];
@@ -13,13 +14,12 @@ export function DataResetPage() {
   const [resetting, setResetting] = useState(false);
   const [summary, setSummary] = useState<ResetSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
   const canReset = confirmation === CONFIRMATION_PHRASE;
 
   async function handleReset() {
-    if (!canReset) return;
-    if (!window.confirm('Dernière confirmation : toutes les données importées, relations, vues et tableaux de bord seront définitivement supprimés. Continuer ?')) return;
-
+    setShowConfirmDialog(false);
     setResetting(true);
     setError(null);
     setSummary(null);
@@ -57,10 +57,20 @@ export function DataResetPage() {
           onChange={(e) => setConfirmation(e.target.value)}
           autoComplete="off"
         />
-        <button type="button" className="danger" disabled={!canReset || resetting} onClick={handleReset}>
+        <button type="button" className="danger" disabled={!canReset || resetting} onClick={() => setShowConfirmDialog(true)}>
           {resetting ? 'Réinitialisation en cours…' : 'Tout réinitialiser'}
         </button>
       </div>
+
+      <ConfirmDialog
+        open={showConfirmDialog}
+        title="Dernière confirmation"
+        message="Toutes les données importées, relations, vues et tableaux de bord seront définitivement supprimés. Cette action est irréversible."
+        confirmLabel="Tout réinitialiser"
+        tone="danger"
+        onConfirm={handleReset}
+        onCancel={() => setShowConfirmDialog(false)}
+      />
 
       {error && (
         <p role="alert" className="error">

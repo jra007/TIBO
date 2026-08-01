@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, Req, UploadedFiles, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Req, UploadedFiles, UseInterceptors } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import type { AuthenticatedRequest } from '../auth/authenticated-request';
 import { RequirePermission } from '../rbac/decorators/require-permission.decorator';
@@ -33,6 +33,13 @@ export class IngestionController {
   @Get('journal')
   listJournal() {
     return this.ingestionService.listJournal();
+  }
+
+  /** Bulk-deletes selected journal entries (e.g. duplicate imports of the same file) — history cleanup only, see the service for why this never touches actual data. */
+  @Delete('journal')
+  @RequirePermission('ingestion:manage')
+  deleteJournalEntries(@Body('ids') ids: string[], @Req() req: AuthenticatedRequest) {
+    return this.ingestionService.deleteJournalEntries(ids, req.user.id);
   }
 
   /** Cosmetic display label for a column, for readability in the builder/charts/exports — doesn't rename the underlying data. */
