@@ -87,7 +87,15 @@ export function ViewDetailPage() {
           ))}
         </select>
       </div>
-      <ViewChart chartType={chartType} dimensionField={view.shelves.rows[0]} measureField={view.shelves.columns[0]} rows={rows} headerLabels={headerLabels} />
+      <ViewChart
+        chartType={chartType}
+        dimensionField={view.shelves.rows[0]}
+        measureField={view.shelves.columns[0]}
+        colorField={view.shelves.color[0]}
+        sizeField={view.shelves.size[0]}
+        rows={rows}
+        headerLabels={headerLabels}
+      />
     </section>
   );
 }

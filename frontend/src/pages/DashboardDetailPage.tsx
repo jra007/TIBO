@@ -100,6 +100,8 @@ export function DashboardDetailPage() {
               chartType={presentations[tile.view.id] ?? tile.view.chartType}
               dimensionField={tile.view.shelves.rows[0]}
               measureField={tile.view.shelves.columns[0]}
+              colorField={tile.view.shelves.color[0]}
+              sizeField={tile.view.shelves.size[0]}
               rows={tile.rows}
               headerLabels={tile.headerLabels}
             />
