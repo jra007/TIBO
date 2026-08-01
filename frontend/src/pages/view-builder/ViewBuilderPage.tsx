@@ -327,6 +327,34 @@ export function ViewBuilderPage() {
                 </button>
               </div>
 
+              {/* Always listed here regardless of shelf placement — once dragged onto a shelf, a
+                  calculated field has no other edit/delete affordance (shelves only offer a "×"
+                  remove, and it disappears from the Champs list like any assigned field). */}
+              {calculatedFields.length > 0 && (
+                <ul className="calculated-field-list">
+                  {calculatedFields.map((calculatedField) => (
+                    <li key={calculatedField.id}>
+                      <span>{calculatedField.label}</span>
+                      <div className="page-actions">
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => {
+                            setSimpleCondition(emptySimpleCondition());
+                            setEditingCalculatedField(calculatedField);
+                          }}
+                        >
+                          Modifier
+                        </button>
+                        <button type="button" className="danger" onClick={() => handleDeleteCalculatedField(calculatedField.id)}>
+                          Supprimer
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
               {editingCalculatedField && (
                 <CalculatedFieldEditor
                   availableFields={schemaFields}
