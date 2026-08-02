@@ -1011,6 +1011,45 @@ tbody tr:hover {
   background: var(--surface-hover, var(--surface));
 }
 
+.export-menu {
+  position: relative;
+  display: inline-block;
+}
+
+.export-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 50;
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  min-width: 120px;
+}
+
+.export-menu-dropdown button {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 6px 10px;
+  margin: 0;
+  font-size: 13px;
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+}
+
+.export-menu-dropdown button:hover {
+  background: var(--surface-hover, var(--surface));
+}
+
 .calculated-field-form textarea {
   width: 100%;
   max-width: 100%;

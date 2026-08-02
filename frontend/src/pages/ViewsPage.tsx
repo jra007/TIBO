@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import type { Group, SavedView } from '../api/types';
+import { ExportMenu } from '../components/ExportMenu';
 import { StatusBadge, type StatusTone } from '../components/StatusBadge';
 
 const RELATION_STATUS_LABELS: Record<SavedView['relationStatus'], string> = {
@@ -50,23 +51,12 @@ function ViewRow({ view, groups, onShared }: { view: SavedView; groups: Group[];
     }
   }
 
-  async function handleExportExcel() {
+  async function handleExport(format: 'excel' | 'pdf') {
     setExporting(true);
     setError(null);
     try {
-      await apiClient.download(`/exports/excel/${view.id}`, `${view.name}.xlsx`);
-    } catch {
-      setError("Échec de l'export.");
-    } finally {
-      setExporting(false);
-    }
-  }
-
-  async function handleExportPdf() {
-    setExporting(true);
-    setError(null);
-    try {
-      await apiClient.download(`/exports/pdf/${view.id}`, `${view.name}.pdf`);
+      const extension = format === 'excel' ? 'xlsx' : 'pdf';
+      await apiClient.download(`/exports/${format}/${view.id}`, `${view.name}.${extension}`);
     } catch {
       setError("Échec de l'export.");
     } finally {
@@ -108,12 +98,7 @@ function ViewRow({ view, groups, onShared }: { view: SavedView; groups: Group[];
             Ne plus partager
           </button>
         )}
-        <button type="button" onClick={handleExportExcel} disabled={exporting}>
-          Exporter en Excel
-        </button>
-        <button type="button" onClick={handleExportPdf} disabled={exporting}>
-          Exporter en PDF
-        </button>
+        <ExportMenu onExport={handleExport} disabled={exporting} />
         {error && (
           <span role="alert" className="error">
             {error}

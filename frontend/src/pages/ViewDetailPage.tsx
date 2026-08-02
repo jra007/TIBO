@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import type { SavedView, ViewData } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
+import { ExportMenu } from '../components/ExportMenu';
 import { StatusBadge, type StatusTone } from '../components/StatusBadge';
 import { useDateSelection } from '../date-selection/DateSelectionContext';
 import { CHART_TYPE_OPTIONS, loadStoredChartType, storeChartType } from './chart-presentation';
@@ -92,12 +93,7 @@ export function ViewDetailPage() {
               Modifier
             </Link>
           )}
-          <button type="button" className="secondary" onClick={() => handleExport('excel')} disabled={exporting}>
-            Exporter en Excel
-          </button>
-          <button type="button" className="secondary" onClick={() => handleExport('pdf')} disabled={exporting}>
-            Exporter en PDF
-          </button>
+          <ExportMenu onExport={handleExport} disabled={exporting} />
         </div>
       </div>
       {exportError && (
