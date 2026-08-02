@@ -516,6 +516,7 @@ export function ViewBuilderPage() {
                 <option value="heatmap">Carte de chaleur</option>
                 <option value="table">Table</option>
                 <option value="geo">Carte géographique</option>
+                <option value="number">Indicateur (nombre)</option>
               </select>
             </label>
             {manualChartType === null && <p>Suggestion automatique : {suggestedChartType}</p>}

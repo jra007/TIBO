@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Put, Req } from '@nestjs/common';
 import type { AuthenticatedRequest } from '../auth/authenticated-request';
 import { RequirePermission } from '../rbac/decorators/require-permission.decorator';
+import type { DashboardLayout } from './dashboards.service';
 import { DashboardsService } from './dashboards.service';
 
 @Controller('dashboards')
@@ -9,14 +10,14 @@ export class DashboardsController {
 
   @Post()
   @RequirePermission('view:create')
-  create(@Req() req: AuthenticatedRequest, @Body() body: { name: string; viewIds: string[]; layout?: unknown }) {
+  create(@Req() req: AuthenticatedRequest, @Body() body: { name: string; viewIds: string[]; layout?: DashboardLayout }) {
     return this.dashboardsService.create(req.user.id, body.name, body.viewIds, body.layout);
   }
 
   @Put(':id')
   @RequirePermission('view:create')
-  update(@Param('id') id: string, @Req() req: AuthenticatedRequest, @Body() body: { name: string; viewIds: string[] }) {
-    return this.dashboardsService.update(id, req.user.id, body.name, body.viewIds);
+  update(@Param('id') id: string, @Req() req: AuthenticatedRequest, @Body() body: { name: string; viewIds: string[]; layout?: DashboardLayout }) {
+    return this.dashboardsService.update(id, req.user.id, body.name, body.viewIds, body.layout);
   }
 
   @Get('mine')

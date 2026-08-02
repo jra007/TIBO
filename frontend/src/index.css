@@ -393,14 +393,20 @@ label.button.secondary:hover {
   border-color: var(--accent);
 }
 
+/* A fixed 3-column grid (not auto-fit) so a tile's Petit/Moyen/Grand size (1/2/3 columns,
+   set via inline gridColumn) maps to a predictable fraction of the row — an auto-fit column
+   count that varies with viewport width would make "Grand" mean a different thing on every
+   screen. Collapses to a single column below 900px, where a span just clamps to 1 anyway. */
 .dashboard-grid {
   display: grid;
-  /* auto-fit (not auto-fill): with fewer tiles than a row could hold, auto-fill still reserves
-     empty invisible tracks sized for phantom content, leaving real tiles stuck at 340px with
-     unused space to their right. auto-fit collapses those empty tracks so the real tiles
-     actually stretch to fill the row. */
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .dashboard-tile {
@@ -448,6 +454,49 @@ label.button.secondary:hover {
   font-size: 13px;
   color: var(--ink-secondary);
   margin: 0;
+}
+
+/* Owner-only row (size + move left/right) below a dashboard tile's header — kept separate from
+   .dashboard-tile-header since it's only ever shown to the dashboard's owner, not every viewer. */
+.dashboard-tile-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.dashboard-tile-controls select {
+  width: auto;
+  max-width: 110px;
+  margin: 0;
+}
+
+.dashboard-tile-controls button {
+  margin: 0;
+  padding: 4px 10px;
+}
+
+.kpi-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  text-align: center;
+}
+
+.kpi-value {
+  font-size: 40px;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.1;
+}
+
+.kpi-label {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--ink-secondary);
 }
 
 /* ---------- Settings pages (Apparence, Rapport, ...): a plain label/description + control

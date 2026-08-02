@@ -7,6 +7,7 @@ export const CHART_TYPE_OPTIONS: { value: ChartType; label: string }[] = [
   { value: 'heatmap', label: 'Carte de chaleur' },
   { value: 'table', label: 'Table' },
   { value: 'geo', label: 'Carte géographique' },
+  { value: 'number', label: 'Indicateur (nombre)' },
 ];
 
 /** Per-viewer display preference, not part of the saved view/dashboard definition — kept in this browser only. */

@@ -9,7 +9,7 @@ import { collectFieldRefs, compileFormula, FormulaError, parseFormula, type Form
 import { quickStatNeedsOrderField, type QuickStatField } from './quick-stats';
 import { buildViewDataQuery } from './view-query-builder';
 
-export type ChartType = 'bar' | 'line' | 'scatter' | 'heatmap' | 'table' | 'geo';
+export type ChartType = 'bar' | 'line' | 'scatter' | 'heatmap' | 'table' | 'geo' | 'number';
 export type ViewVisibility = 'private' | 'shared';
 export type ViewRelationStatus = 'validated' | 'pending' | 'to_fix';
 

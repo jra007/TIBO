@@ -122,6 +122,16 @@ function DataTable({ rows, headerLabels }: { rows: Record<string, unknown>[]; he
 export function ViewChart({ chartType, dimensionField, measureField, colorField, sizeField, rows, headerLabels = {} }: ViewChartProps) {
   if (chartType === 'table') return <DataTable rows={rows} headerLabels={headerLabels} />;
 
+  if (chartType === 'number') {
+    const value = measureField && rows.length > 0 ? Number(rows[0][fieldKey(measureField)]) || 0 : null;
+    return (
+      <div className="kpi-tile">
+        <div className="kpi-value">{value === null ? '—' : new Intl.NumberFormat('fr-FR').format(value)}</div>
+        {measureField && <div className="kpi-label">{fieldLabel(measureField, headerLabels)}</div>}
+      </div>
+    );
+  }
+
   if (chartType === 'heatmap' || chartType === 'geo' || !dimensionField || !measureField) {
     return (
       <>

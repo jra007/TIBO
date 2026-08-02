@@ -86,7 +86,7 @@ export interface TableSchema {
   columns: { columnName: string; dtype: ColumnType; label: string | null }[];
 }
 
-export type ChartType = 'bar' | 'line' | 'scatter' | 'heatmap' | 'table' | 'geo';
+export type ChartType = 'bar' | 'line' | 'scatter' | 'heatmap' | 'table' | 'geo' | 'number';
 export type ViewVisibility = 'private' | 'shared';
 export type ViewRelationStatus = 'validated' | 'pending' | 'to_fix';
 
@@ -182,12 +182,17 @@ export interface SavedView {
   createdAt: string;
 }
 
+export type DashboardTileSize = 'small' | 'medium' | 'large';
+
+/** Keyed by view id. A tile with no entry (any dashboard created before this feature) falls back to 'medium'. */
+export type DashboardLayout = Record<string, { size: DashboardTileSize }>;
+
 export interface Dashboard {
   id: string;
   ownerId: string;
   name: string;
   viewIds: string[];
-  layout: unknown;
+  layout: DashboardLayout;
   visibility: ViewVisibility;
   sharedWithGroupId: string | null;
   createdAt: string;
