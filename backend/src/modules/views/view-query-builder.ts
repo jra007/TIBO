@@ -57,15 +57,45 @@ function resolveFieldSql(knex: Knex, field: { tableName: string; columnName: str
   return knex.raw('??', [`${field.tableName}.${field.columnName}`]);
 }
 
+/**
+ * Live-introspects whether specific real (non-calculated) columns are text-like, so 'eq'/'neq'
+ * can match regardless of case — dtype isn't tracked on FilterCondition itself, and mapPgType
+ * (relations/column-profiler.service.ts) isn't exported, so the same "not a numeric/date/boolean
+ * data_type" rule is re-derived here for just the columns that actually need it (eq/neq filters).
+ */
+async function resolveTextColumns(knex: Knex, columns: { tableName: string; columnName: string }[]): Promise<Set<string>> {
+  if (columns.length === 0) return new Set();
+  const rows: { table_name: string; column_name: string; data_type: string }[] = await knex('information_schema.columns')
+    .select('table_name', 'column_name', 'data_type')
+    .where('table_schema', 'public')
+    .where((builder) => {
+      for (const { tableName, columnName } of columns) builder.orWhere({ table_name: tableName, column_name: columnName });
+    });
+  const textColumns = new Set<string>();
+  for (const row of rows) {
+    const isNumericDateOrBoolean =
+      row.data_type.includes('numeric') ||
+      row.data_type.includes('int') ||
+      row.data_type.includes('double') ||
+      row.data_type.includes('timestamp') ||
+      row.data_type.includes('date') ||
+      row.data_type === 'boolean';
+    if (!isNumericDateOrBoolean) textColumns.add(`${row.table_name}.${row.column_name}`);
+  }
+  return textColumns;
+}
+
 /** Ignores a filter missing what it needs (no operator/value yet, or no second value for 'between') rather than erroring — lets a half-filled filter sit on the shelf without breaking the view. */
-function applyFilter(query: Knex.QueryBuilder, filter: FilterCondition, columnSql: Knex.Raw): Knex.QueryBuilder {
+function applyFilter(query: Knex.QueryBuilder, filter: FilterCondition, columnSql: Knex.Raw, isText: boolean): Knex.QueryBuilder {
   if (filter.value == null || filter.value === '') return query;
 
   switch (filter.operator) {
     case 'eq':
-      return query.where(columnSql, '=', filter.value);
+      // Case-insensitive exact match for text (ilike with no wildcards) — plain '=' is
+      // case-sensitive in Postgres and would otherwise miss "Paris" for a search of "paris".
+      return isText ? query.where(columnSql, 'ilike', filter.value) : query.where(columnSql, '=', filter.value);
     case 'neq':
-      return query.where(columnSql, '!=', filter.value);
+      return isText ? query.where(columnSql, 'not ilike', filter.value) : query.where(columnSql, '!=', filter.value);
     case 'gt':
       return query.where(columnSql, '>', filter.value);
     case 'gte':
@@ -161,8 +191,18 @@ export async function buildViewDataQuery(
     remaining.splice(nextIndex, 1);
   }
 
-  for (const filter of shelves.filters) query = applyFilter(query, filter, resolveFieldSql(knex, filter, calculatedFieldsById));
-  for (const filter of validRuntimeFilters) query = applyFilter(query, filter, resolveFieldSql(knex, filter, calculatedFieldsById));
+  const allFilters = [...shelves.filters, ...validRuntimeFilters];
+  const eqNeqRealColumns = allFilters
+    .filter((f) => (f.operator === 'eq' || f.operator === 'neq') && f.tableName !== CALCULATED_FIELD_TABLE)
+    .map((f) => ({ tableName: f.tableName, columnName: f.columnName }));
+  const textColumns = await resolveTextColumns(knex, eqNeqRealColumns);
+  const isTextFilter = (filter: FilterCondition): boolean =>
+    filter.tableName === CALCULATED_FIELD_TABLE
+      ? calculatedFieldsById.get(filter.columnName)?.dtype === 'text'
+      : textColumns.has(`${filter.tableName}.${filter.columnName}`);
+
+  for (const filter of shelves.filters) query = applyFilter(query, filter, resolveFieldSql(knex, filter, calculatedFieldsById), isTextFilter(filter));
+  for (const filter of validRuntimeFilters) query = applyFilter(query, filter, resolveFieldSql(knex, filter, calculatedFieldsById), isTextFilter(filter));
 
   // Per-table historization filter (addendum: TIBO_addendum_doublons_et_dates.md, point 4): a
   // table becomes append-only history the moment it's re-ingested, so without this every view
