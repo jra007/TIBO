@@ -1,8 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../../api/client';
-import type { JournalEntry, UploadResponse } from '../../api/types';
+import type { CleaningReport, JournalEntry, UploadResponse } from '../../api/types';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+
+/** Human-readable summary of automatic cleanup, for the journal's traceability requirement (nettoyage addendum, section 5). */
+function describeCleaningReport(report: CleaningReport | null): string {
+  if (!report) return '—';
+  const parts: string[] = [];
+  if (report.headerRowIndex > 0) parts.push(`en-tête décalée de ${report.headerRowIndex} ligne(s)`);
+  if (report.droppedBlankColumns.length > 0) parts.push(`${report.droppedBlankColumns.length} colonne(s) vide(s) supprimée(s)`);
+  if (report.encoding !== 'utf-8') parts.push(`encodage : ${report.encoding}`);
+  return parts.length > 0 ? parts.join(', ') : 'Aucun';
+}
 
 const DATE_PRESETS = [
   { value: 'all', label: 'Toutes les dates' },
@@ -140,6 +150,9 @@ export function IngestionJournalPage() {
               <li key={index} className={entry.status === 'success' ? undefined : entry.status === 'duplicate' ? 'warning' : 'error'}>
                 <strong>{entry.fileName}</strong> —{' '}
                 {entry.status === 'success' ? `${entry.rowCount} ligne(s) importée(s)` : entry.errors.join(', ')}
+                {entry.status === 'success' && entry.cleaningReport && describeCleaningReport(entry.cleaningReport) !== 'Aucun' && (
+                  <span className="cleaning-summary"> · Nettoyage : {describeCleaningReport(entry.cleaningReport)}</span>
+                )}
               </li>
             ))}
           </ul>
@@ -206,6 +219,7 @@ export function IngestionJournalPage() {
             <th scope="col">Lignes</th>
             <th scope="col">Statut</th>
             <th scope="col">Erreurs</th>
+            <th scope="col">Nettoyage</th>
           </tr>
         </thead>
         <tbody>
@@ -223,11 +237,12 @@ export function IngestionJournalPage() {
               <td>{entry.rowCount}</td>
               <td>{entry.status === 'success' ? 'Succès' : entry.status === 'duplicate' ? 'Doublon rejeté' : 'Erreur'}</td>
               <td>{entry.errors.join(', ')}</td>
+              <td>{describeCleaningReport(entry.cleaningReport)}</td>
             </tr>
           ))}
           {filteredJournal.length === 0 && (
             <tr>
-              <td colSpan={7}>{journal.length === 0 ? 'Aucun import pour le moment.' : 'Aucun import ne correspond à cette période.'}</td>
+              <td colSpan={8}>{journal.length === 0 ? 'Aucun import pour le moment.' : 'Aucun import ne correspond à cette période.'}</td>
             </tr>
           )}
         </tbody>

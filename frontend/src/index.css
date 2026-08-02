@@ -804,6 +804,11 @@ tbody tr:hover {
   border-color: var(--critical);
 }
 
+.cleaning-summary {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
 /* ---------- View builder ---------- */
 
 .shelves-column {

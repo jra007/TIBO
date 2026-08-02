@@ -10,6 +10,7 @@ import {
   normalizeTableName,
   normalizeValue,
   parseSpreadsheet,
+  type CleaningReport,
 } from './parsing';
 
 export type ColumnType = 'text' | 'date' | 'numeric' | 'boolean';
@@ -20,6 +21,7 @@ export interface IngestionResult {
   rowCount: number;
   status: 'success' | 'error' | 'duplicate';
   errors: string[];
+  cleaningReport: CleaningReport | null;
 }
 
 export interface JournalEntry {
@@ -30,6 +32,7 @@ export interface JournalEntry {
   status: 'success' | 'error' | 'duplicate';
   errors: string[];
   importedAt: Date;
+  cleaningReport: CleaningReport | null;
 }
 
 const BATCH_SIZE = 500;
@@ -82,19 +85,25 @@ export class IngestionService {
         rowCount: 0,
         status: 'duplicate',
         errors: [message],
+        cleaningReport: null,
       };
       await this.writeJournalEntry(result, fileHash);
       return result;
     }
 
     try {
-      const rowCount = await this.loadIntoTable(tableName, buffer);
+      const { rowCount, report } = await this.loadIntoTable(
+        tableName,
+        buffer,
+        fileName,
+      );
       const result: IngestionResult = {
         fileName,
         tableName,
         rowCount,
         status: 'success',
         errors: [],
+        cleaningReport: report,
       };
       await this.writeJournalEntry(result, fileHash);
       return result;
@@ -107,6 +116,7 @@ export class IngestionService {
         rowCount: 0,
         status: 'error',
         errors: [message],
+        cleaningReport: null,
       };
       await this.writeJournalEntry(result, fileHash);
       return result;
@@ -125,8 +135,9 @@ export class IngestionService {
   private async loadIntoTable(
     tableName: string,
     buffer: Buffer,
-  ): Promise<number> {
-    const rows = parseSpreadsheet(buffer);
+    fileName: string,
+  ): Promise<{ rowCount: number; report: CleaningReport }> {
+    const { rows, report } = parseSpreadsheet(buffer, fileName);
     if (rows.length === 0)
       throw new Error('Fichier vide ou format non reconnu');
 
@@ -191,7 +202,7 @@ export class IngestionService {
           .transacting(trx);
     });
 
-    return records.length;
+    return { rowCount: records.length, report };
   }
 
   /**
@@ -204,9 +215,13 @@ export class IngestionService {
       `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name LIKE 'src\\_%' ESCAPE '\\'`,
     );
     let latest: string | null = null;
-    for (const { table_name: tableName } of tables as { table_name: string }[]) {
+    for (const { table_name: tableName } of tables as {
+      table_name: string;
+    }[]) {
       const row = await this.knex(tableName).max('date_ingestion as d').first();
-      const value = row?.d ? new Date(row.d as string).toISOString().slice(0, 10) : null;
+      const value = row?.d
+        ? new Date(row.d as string).toISOString().slice(0, 10)
+        : null;
       if (value && (!latest || value > latest)) latest = value;
     }
     return latest;
@@ -236,6 +251,10 @@ export class IngestionService {
       status: row.status,
       errors: row.errors,
       importedAt: row.imported_at,
+      cleaningReport:
+        row.cleaning_report && Object.keys(row.cleaning_report).length > 0
+          ? row.cleaning_report
+          : null,
     }));
   }
 
@@ -274,6 +293,7 @@ export class IngestionService {
       status: result.status,
       errors: JSON.stringify(result.errors),
       file_hash: fileHash,
+      cleaning_report: JSON.stringify(result.cleaningReport ?? {}),
     });
   }
 }
