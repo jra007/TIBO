@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import type { Dashboard, DashboardLayout, DashboardTileSize, Group, SavedView, ViewData } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
+import { AddKpiForm } from '../components/AddKpiForm';
 import { EditDashboardForm } from '../components/EditDashboardForm';
 import { ExportMenu } from '../components/ExportMenu';
 import { ShareControl } from '../components/ShareControl';
@@ -41,6 +42,7 @@ export function DashboardDetailPage() {
   const [exportError, setExportError] = useState<string | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [sharing, setSharing] = useState(false);
+  const [addingKpi, setAddingKpi] = useState(false);
 
   useEffect(() => {
     apiClient.get<Group[]>('/groups').then(setGroups);
@@ -56,6 +58,15 @@ export function DashboardDetailPage() {
     if (!id) return;
     await apiClient.post(`/dashboards/${id}/unshare`);
     setDashboard(await apiClient.get<Dashboard>(`/dashboards/${id}`));
+  }
+
+  /** Adds the just-created KPI view to this dashboard's selection — a real refetch (not
+   * persistLayout's local re-sort) since the new tile's data doesn't exist client-side yet. */
+  async function handleKpiCreated(view: SavedView) {
+    if (!dashboard) return;
+    await apiClient.put(`/dashboards/${dashboard.id}`, { name: dashboard.name, viewIds: [...dashboard.viewIds, view.id], layout: dashboard.layout });
+    setAddingKpi(false);
+    await load();
   }
 
   async function load() {
@@ -159,6 +170,9 @@ export function DashboardDetailPage() {
               <button type="button" onClick={() => setEditing(true)}>
                 Modifier
               </button>
+              <button type="button" className="secondary" onClick={() => setAddingKpi((v) => !v)}>
+                {addingKpi ? 'Fermer' : '+ Ajouter un indicateur'}
+              </button>
               <button type="button" className="secondary" onClick={() => setSharing((v) => !v)}>
                 {sharing ? 'Fermer' : dashboard.visibility === 'shared' ? 'Partagé' : 'Partager'}
               </button>
@@ -194,6 +208,8 @@ export function DashboardDetailPage() {
           }}
         />
       )}
+
+      {addingKpi && <AddKpiForm onCreated={handleKpiCreated} onCancel={() => setAddingKpi(false)} />}
 
       {tiles.length === 0 && <p>Ce tableau de bord ne contient aucune vue.</p>}
 
