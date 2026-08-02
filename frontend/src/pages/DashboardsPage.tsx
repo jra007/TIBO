@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import type { Dashboard, Group, SavedView } from '../api/types';
+import { AddKpiForm } from '../components/AddKpiForm';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { EditDashboardForm } from '../components/EditDashboardForm';
 
@@ -93,6 +94,7 @@ export function DashboardsPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [name, setName] = useState('');
   const [selectedViewIds, setSelectedViewIds] = useState<string[]>([]);
+  const [addingKpi, setAddingKpi] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function refresh() {
@@ -125,6 +127,14 @@ export function DashboardsPage() {
     setSelectedViewIds((prev) => (prev.includes(viewId) ? prev.filter((id) => id !== viewId) : [...prev, viewId]));
   }
 
+  /** The dashboard doesn't exist yet at this point — the new KPI view just joins the same
+   * "views to include" selection as any already-existing view, checked by default. */
+  async function handleKpiCreatedBeforeSave(view: SavedView) {
+    setMyViews((prev) => [...prev, view]);
+    setSelectedViewIds((prev) => [...prev, view.id]);
+    setAddingKpi(false);
+  }
+
   async function handleCreate(event: React.FormEvent) {
     event.preventDefault();
     await apiClient.post('/dashboards', { name, viewIds: selectedViewIds, layout: {} });
@@ -153,25 +163,32 @@ export function DashboardsPage() {
       )}
 
       {showCreateForm && (
-        <form onSubmit={handleCreate} className="calculated-field-form">
-          <h3>Créer un tableau de bord</h3>
-          <label htmlFor="dashboard-name">Nom</label>
-          <input id="dashboard-name" value={name} onChange={(e) => setName(e.target.value)} required />
-          <fieldset>
-            <legend>Vues à inclure</legend>
-            {myViews.map((view) => (
-              <label key={view.id}>
-                <input type="checkbox" checked={selectedViewIds.includes(view.id)} onChange={() => toggleView(view.id)} />
-                {view.name}
-              </label>
-            ))}
-          </fieldset>
-          <div className="page-actions">
-            <button type="submit" disabled={!name || selectedViewIds.length === 0}>
-              Créer
-            </button>
-          </div>
-        </form>
+        <>
+          <form onSubmit={handleCreate} className="calculated-field-form">
+            <h3>Créer un tableau de bord</h3>
+            <label htmlFor="dashboard-name">Nom</label>
+            <input id="dashboard-name" value={name} onChange={(e) => setName(e.target.value)} required />
+            <fieldset>
+              <legend>Vues à inclure</legend>
+              {myViews.map((view) => (
+                <label key={view.id}>
+                  <input type="checkbox" checked={selectedViewIds.includes(view.id)} onChange={() => toggleView(view.id)} />
+                  {view.name}
+                </label>
+              ))}
+            </fieldset>
+            <div className="page-actions">
+              <button type="button" className="secondary" onClick={() => setAddingKpi((v) => !v)}>
+                {addingKpi ? 'Fermer' : '+ Ajouter un indicateur'}
+              </button>
+              <button type="submit" disabled={!name || selectedViewIds.length === 0}>
+                Créer
+              </button>
+            </div>
+          </form>
+          {/* Rendered as a sibling, not nested inside the form above — a <form> inside another <form> is invalid HTML and browsers silently mis-handle it (e.g. the inner submit can trigger the outer one). */}
+          {addingKpi && <AddKpiForm onCreated={handleKpiCreatedBeforeSave} onCancel={() => setAddingKpi(false)} />}
+        </>
       )}
 
       <h2>Mes tableaux de bord</h2>
