@@ -1,12 +1,17 @@
 import * as XLSX from 'xlsx';
 import type { ColumnType } from './ingestion.service';
 
-/** What automatic cleanup did to a file, for the ingestion journal — see TIBO_addendum_nettoyage_fichiers.md section 2. */
+/** What cleanup (automatic or assisted) did to a file, for the ingestion journal — see TIBO_addendum_nettoyage_fichiers.md sections 2 and 5. */
 export interface CleaningReport {
   encoding: 'utf-8' | 'latin1';
   /** 0 = the header was already on the first row; >0 = that many leading rows (title/free text) were skipped. */
   headerRowIndex: number;
-  droppedBlankColumns: string[];
+  /** Blank or manually excluded (a memorized rule doesn't distinguish the two after the fact). */
+  droppedColumns: string[];
+  /** Rows actually kept after any trailing exclusion — the anomaly guard's baseline (see IngestionService). */
+  keptRowCount: number;
+  /** Rows dropped by a trailing exclusion (a memorized rule's or a fresh correction's), 0 if none applies. */
+  trailingRowsExcluded: number;
 }
 
 function isCsvFile(fileName: string): boolean {
@@ -177,9 +182,9 @@ export function parseSpreadsheet(
     report: {
       encoding,
       headerRowIndex,
-      droppedBlankColumns: headers.filter((_, index) =>
-        droppedIndexes.has(index),
-      ),
+      droppedColumns: headers.filter((_, index) => droppedIndexes.has(index)),
+      keptRowCount: dataRows.length,
+      trailingRowsExcluded: nonEmptyDataRows.length - dataRows.length,
     },
   };
 }

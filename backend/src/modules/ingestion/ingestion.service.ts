@@ -3,6 +3,8 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../../database/database.constants';
 import { AuditService } from '../audit/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { RbacService } from '../rbac/rbac.service';
 import { setLabel } from '../views/column-labels';
 import {
   inferColumnTypes,
@@ -18,11 +20,14 @@ import {
 
 export type ColumnType = 'text' | 'date' | 'numeric' | 'boolean';
 
+export type IngestionStatus =
+  'success' | 'error' | 'duplicate' | 'pending_review';
+
 export interface IngestionResult {
   fileName: string;
   tableName: string;
   rowCount: number;
-  status: 'success' | 'error' | 'duplicate';
+  status: IngestionStatus;
   errors: string[];
   cleaningReport: CleaningReport | null;
 }
@@ -32,7 +37,7 @@ export interface JournalEntry {
   fileName: string;
   tableName: string;
   rowCount: number;
-  status: 'success' | 'error' | 'duplicate';
+  status: IngestionStatus;
   errors: string[];
   importedAt: Date;
   cleaningReport: CleaningReport | null;
@@ -66,6 +71,8 @@ export class IngestionService {
   constructor(
     @Inject(KNEX_CONNECTION) private readonly knex: Knex,
     private readonly auditService: AuditService,
+    private readonly rbacService: RbacService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -174,12 +181,38 @@ export class IngestionService {
     }
 
     try {
-      const { rowCount, report } = await this.loadIntoTable(
-        tableName,
+      const { rows, report } = parseSpreadsheet(
         buffer,
         fileName,
         effectiveCorrection,
       );
+      if (rows.length === 0)
+        throw new Error('Fichier vide ou format non reconnu');
+
+      // Anomaly guard (nettoyage addendum, section 4): only when *reapplying* a rule memorized
+      // from a past import, never for a correction just validated by a human moments ago — that
+      // one is already a considered decision, not a blind repeat of one. A rule reapplied on a
+      // file that now deviates far from its own recent history (e.g. a much larger fraction of
+      // rows would be excluded than usual) pauses here instead of executing silently.
+      const isReappliedRule = !correction && effectiveCorrection !== undefined;
+      if (isReappliedRule) {
+        const anomaly = await this.detectCleaningAnomaly(fileName, report);
+        if (anomaly) {
+          const result: IngestionResult = {
+            fileName,
+            tableName,
+            rowCount: 0,
+            status: 'pending_review',
+            errors: [anomaly],
+            cleaningReport: report,
+          };
+          await this.writeJournalEntry(result, fileHash);
+          await this.alertDataAdmins(fileName, anomaly);
+          return result;
+        }
+      }
+
+      const rowCount = await this.loadIntoTable(tableName, rows);
       const result: IngestionResult = {
         fileName,
         tableName,
@@ -206,6 +239,71 @@ export class IngestionService {
     }
   }
 
+  private static readonly ANOMALY_MULTIPLIER = 4;
+  private static readonly MIN_HISTORY_FOR_ANOMALY_CHECK = 2;
+
+  /**
+   * Compares this import's exclusion ratio (trailing rows dropped ÷ total data rows) against the
+   * last few successful imports of the same file. Returns a message if it's an outlier (more than
+   * ANOMALY_MULTIPLIER times the recent average — the addendum suggests "3 to 5x", this picks the
+   * middle), or null if there's nothing unusual (or not enough history yet to tell).
+   */
+  private async detectCleaningAnomaly(
+    fileName: string,
+    report: CleaningReport,
+  ): Promise<string | null> {
+    const currentTotal = report.keptRowCount + report.trailingRowsExcluded;
+    if (currentTotal === 0 || report.trailingRowsExcluded === 0) return null;
+    const currentRatio = report.trailingRowsExcluded / currentTotal;
+
+    const priorEntries: { cleaning_report: CleaningReport | null }[] =
+      await this.knex('ingestion_journal')
+        .where({ file_name: fileName, status: 'success' })
+        .whereNotNull('cleaning_report')
+        .orderBy('imported_at', 'desc')
+        .limit(5);
+
+    const priorRatios = priorEntries
+      .map((entry) => entry.cleaning_report)
+      .filter(
+        (priorReport): priorReport is CleaningReport =>
+          priorReport !== null && typeof priorReport.keptRowCount === 'number',
+      )
+      .map((priorReport) => {
+        const total =
+          priorReport.keptRowCount + priorReport.trailingRowsExcluded;
+        return total > 0 ? priorReport.trailingRowsExcluded / total : 0;
+      });
+
+    if (priorRatios.length < IngestionService.MIN_HISTORY_FOR_ANOMALY_CHECK)
+      return null;
+
+    const averageRatio =
+      priorRatios.reduce((sum, ratio) => sum + ratio, 0) / priorRatios.length;
+    if (averageRatio === 0) {
+      return `Ce fichier n'excluait habituellement aucune ligne en fin de fichier ; ${report.trailingRowsExcluded} ligne(s) seraient exclues cette fois. Import mis en attente pour validation par un administrateur données.`;
+    }
+    if (currentRatio > averageRatio * IngestionService.ANOMALY_MULTIPLIER) {
+      return `Le nettoyage exclurait ${(currentRatio * 100).toFixed(0)}% des lignes de ce fichier, contre ${(averageRatio * 100).toFixed(0)}% habituellement. Import mis en attente pour validation par un administrateur données.`;
+    }
+    return null;
+  }
+
+  private async alertDataAdmins(
+    fileName: string,
+    message: string,
+  ): Promise<void> {
+    const adminIds =
+      await this.rbacService.listUsersWithPermission('ingestion:manage');
+    for (const userId of adminIds) {
+      await this.notificationsService.notify({
+        recipientUserId: userId,
+        subject: `Import en attente de validation : ${fileName}`,
+        body: message,
+      });
+    }
+  }
+
   /**
    * Append-only: an existing table is never dropped or overwritten (see
    * TIBO_addendum_doublons_et_dates.md). Every row carries `date_ingestion` (the UTC calendar day
@@ -217,14 +315,8 @@ export class IngestionService {
    */
   private async loadIntoTable(
     tableName: string,
-    buffer: Buffer,
-    fileName: string,
-    correction?: CleaningCorrection,
-  ): Promise<{ rowCount: number; report: CleaningReport }> {
-    const { rows, report } = parseSpreadsheet(buffer, fileName, correction);
-    if (rows.length === 0)
-      throw new Error('Fichier vide ou format non reconnu');
-
+    rows: Record<string, unknown>[],
+  ): Promise<number> {
     const headers = Object.keys(rows[0]);
     const columnTypes = inferColumnTypes(rows, headers);
     const columns = headers.map((header, index) => ({
@@ -286,7 +378,7 @@ export class IngestionService {
           .transacting(trx);
     });
 
-    return { rowCount: records.length, report };
+    return records.length;
   }
 
   /**

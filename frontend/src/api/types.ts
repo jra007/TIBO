@@ -1,16 +1,20 @@
-/** What automatic cleanup did to a file before ingestion — see the nettoyage addendum. */
+/** What cleanup (automatic or assisted) did to a file before ingestion — see the nettoyage addendum. */
 export interface CleaningReport {
   encoding: 'utf-8' | 'latin1';
   /** 0 = header already on the first row; >0 = that many leading rows were skipped. */
   headerRowIndex: number;
-  droppedBlankColumns: string[];
+  droppedColumns: string[];
+  keptRowCount: number;
+  trailingRowsExcluded: number;
 }
+
+export type IngestionStatus = 'success' | 'error' | 'duplicate' | 'pending_review';
 
 export interface IngestionResult {
   fileName: string;
   tableName: string;
   rowCount: number;
-  status: 'success' | 'error' | 'duplicate';
+  status: IngestionStatus;
   errors: string[];
   cleaningReport: CleaningReport | null;
 }
@@ -41,7 +45,7 @@ export interface JournalEntry {
   fileName: string;
   tableName: string;
   rowCount: number;
-  status: 'success' | 'error' | 'duplicate';
+  status: IngestionStatus;
   errors: string[];
   importedAt: string;
   cleaningReport: CleaningReport | null;

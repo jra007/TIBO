@@ -13,12 +13,20 @@ interface ReviewState {
   corrections: Record<string, CleaningCorrection>;
 }
 
-/** Human-readable summary of automatic cleanup, for the journal's traceability requirement (nettoyage addendum, section 5). */
+const STATUS_LABELS: Record<JournalEntry['status'], string> = {
+  success: 'Succès',
+  error: 'Erreur',
+  duplicate: 'Doublon rejeté',
+  pending_review: 'En attente de validation',
+};
+
+/** Human-readable summary of cleanup (automatic or assisted), for the journal's traceability requirement (nettoyage addendum, section 5). */
 function describeCleaningReport(report: CleaningReport | null): string {
   if (!report) return '—';
   const parts: string[] = [];
   if (report.headerRowIndex > 0) parts.push(`en-tête décalée de ${report.headerRowIndex} ligne(s)`);
-  if (report.droppedBlankColumns.length > 0) parts.push(`${report.droppedBlankColumns.length} colonne(s) vide(s) supprimée(s)`);
+  if (report.droppedColumns.length > 0) parts.push(`${report.droppedColumns.length} colonne(s) supprimée(s)`);
+  if (report.trailingRowsExcluded > 0) parts.push(`${report.trailingRowsExcluded} ligne(s) exclue(s) (fin de fichier)`);
   if (report.encoding !== 'utf-8') parts.push(`encodage : ${report.encoding}`);
   return parts.length > 0 ? parts.join(', ') : 'Aucun';
 }
@@ -214,7 +222,7 @@ export function IngestionJournalPage() {
         <div className="upload-result">
           <ul>
             {result.imports.map((entry, index) => (
-              <li key={index} className={entry.status === 'success' ? undefined : entry.status === 'duplicate' ? 'warning' : 'error'}>
+              <li key={index} className={entry.status === 'success' ? undefined : entry.status === 'error' ? 'error' : 'warning'}>
                 <strong>{entry.fileName}</strong> —{' '}
                 {entry.status === 'success' ? `${entry.rowCount} ligne(s) importée(s)` : entry.errors.join(', ')}
                 {entry.status === 'success' && entry.cleaningReport && describeCleaningReport(entry.cleaningReport) !== 'Aucun' && (
@@ -302,7 +310,7 @@ export function IngestionJournalPage() {
               <td>{entry.fileName}</td>
               <td>{entry.tableName}</td>
               <td>{entry.rowCount}</td>
-              <td>{entry.status === 'success' ? 'Succès' : entry.status === 'duplicate' ? 'Doublon rejeté' : 'Erreur'}</td>
+              <td>{STATUS_LABELS[entry.status]}</td>
               <td>{entry.errors.join(', ')}</td>
               <td>{describeCleaningReport(entry.cleaningReport)}</td>
             </tr>
