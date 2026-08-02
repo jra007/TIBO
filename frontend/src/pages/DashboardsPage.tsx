@@ -6,28 +6,22 @@ import { AddKpiForm } from '../components/AddKpiForm';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { EditDashboardForm } from '../components/EditDashboardForm';
 import { useDateSelection } from '../date-selection/DateSelectionContext';
-import { TILE_SIZE_LABELS, tileSize } from './dashboard-tile-size';
+import { TILE_SIZE_LABELS, TILE_SIZE_SPANS } from './dashboard-tile-size';
 
 interface DashboardKpi {
   id: string;
   label: string;
   value: number;
-  size: DashboardTileSize;
 }
 
 /**
  * The whole point of a KPI is seeing it at a glance — surfacing it only after opening a
  * dashboard defeated that. Fetches just the dashboard's 'number'-typed views (skips the rest,
- * no need to load full chart data for a card) and shows each as a compact value + label, sized
- * to match the Petit/Moyen/Grand already chosen for that tile on the dashboard's own page.
- * `onChanged` present (only for "my" dashboards, not read-only shared ones) also makes the size
- * editable right here — writes through the same PUT /dashboards/:id the dashboard's own page
- * uses, so both stay in sync regardless of which one was used to change it.
+ * no need to load full chart data for a card) and shows each as a compact value + label.
  */
-function DashboardKpiPreview({ dashboard, onChanged }: { dashboard: Dashboard; onChanged?: () => Promise<void> }) {
+function DashboardKpiPreview({ viewIds }: { viewIds: string[] }) {
   const { selectedDate } = useDateSelection();
   const [kpis, setKpis] = useState<DashboardKpi[]>([]);
-  const { viewIds, layout } = dashboard;
 
   useEffect(() => {
     if (!selectedDate || viewIds.length === 0) {
@@ -44,7 +38,7 @@ function DashboardKpiPreview({ dashboard, onChanged }: { dashboard: Dashboard; o
             const data = await apiClient.get<ViewData>(`/views/${viewId}/data?date=${encodeURIComponent(selectedDate as string)}`);
             const measureKey = data.headers[0];
             const value = data.rows.length > 0 && measureKey ? Number(data.rows[0][measureKey]) || 0 : 0;
-            return { id: viewId, label: view.name, value, size: tileSize(layout, viewId) };
+            return { id: viewId, label: view.name, value };
           } catch {
             return null;
           }
@@ -56,40 +50,16 @@ function DashboardKpiPreview({ dashboard, onChanged }: { dashboard: Dashboard; o
     return () => {
       cancelled = true;
     };
-  }, [viewIds, layout, selectedDate]);
-
-  async function handleResize(viewId: string, size: DashboardTileSize) {
-    if (!onChanged) return;
-    await apiClient.put(`/dashboards/${dashboard.id}`, {
-      name: dashboard.name,
-      viewIds: dashboard.viewIds,
-      layout: { ...dashboard.layout, [viewId]: { size } },
-    });
-    await onChanged();
-  }
+  }, [viewIds, selectedDate]);
 
   if (kpis.length === 0) return null;
 
   return (
     <div className="dashboard-list-card-kpis">
       {kpis.map((kpi) => (
-        <div className={`dashboard-list-card-kpi dashboard-list-card-kpi-${kpi.size}`} key={kpi.id}>
+        <div className="dashboard-list-card-kpi" key={kpi.id}>
           <div className="dashboard-list-card-kpi-value">{new Intl.NumberFormat('fr-FR').format(kpi.value)}</div>
           <div className="dashboard-list-card-kpi-label">{kpi.label}</div>
-          {onChanged && (
-            <>
-              <label htmlFor={`kpi-size-${kpi.id}`} className="visually-hidden">
-                Taille de {kpi.label}
-              </label>
-              <select id={`kpi-size-${kpi.id}`} value={kpi.size} onChange={(e) => handleResize(kpi.id, e.target.value as DashboardTileSize)}>
-                {(Object.keys(TILE_SIZE_LABELS) as DashboardTileSize[]).map((option) => (
-                  <option key={option} value={option}>
-                    {TILE_SIZE_LABELS[option]}
-                  </option>
-                ))}
-              </select>
-            </>
-          )}
         </div>
       ))}
     </div>
@@ -115,8 +85,13 @@ function DashboardCard({ dashboard, onChanged }: { dashboard: Dashboard; onChang
     }
   }
 
+  async function handleResizeCard(cardSize: DashboardTileSize) {
+    await apiClient.put(`/dashboards/${dashboard.id}`, { name: dashboard.name, viewIds: dashboard.viewIds, cardSize });
+    await onChanged();
+  }
+
   return (
-    <div className="dashboard-list-card">
+    <div className="dashboard-list-card" style={{ gridColumn: `span ${TILE_SIZE_SPANS[dashboard.cardSize]}` }}>
       <div className="dashboard-list-card-header">
         <Link to={`/dashboards/${dashboard.id}`}>{dashboard.name}</Link>
         <span className={`visibility-pill ${dashboard.visibility}`}>{dashboard.visibility === 'private' ? 'Privé' : 'Partagé'}</span>
@@ -124,7 +99,7 @@ function DashboardCard({ dashboard, onChanged }: { dashboard: Dashboard; onChang
       <p className="dashboard-list-card-meta">
         {dashboard.viewIds.length} vue{dashboard.viewIds.length > 1 ? 's' : ''} · Créé le {new Date(dashboard.createdAt).toLocaleDateString('fr-FR')}
       </p>
-      <DashboardKpiPreview dashboard={dashboard} onChanged={onChanged} />
+      <DashboardKpiPreview viewIds={dashboard.viewIds} />
 
       {error && (
         <p role="alert" className="error">
@@ -143,6 +118,16 @@ function DashboardCard({ dashboard, onChanged }: { dashboard: Dashboard; onChang
         />
       ) : (
         <div className="page-actions">
+          <label htmlFor={`card-size-${dashboard.id}`} className="visually-hidden">
+            Largeur de la carte {dashboard.name}
+          </label>
+          <select id={`card-size-${dashboard.id}`} value={dashboard.cardSize} onChange={(e) => handleResizeCard(e.target.value as DashboardTileSize)}>
+            {(Object.keys(TILE_SIZE_LABELS) as DashboardTileSize[]).map((option) => (
+              <option key={option} value={option}>
+                {TILE_SIZE_LABELS[option]}
+              </option>
+            ))}
+          </select>
           <button type="button" className="secondary" onClick={() => setEditing(true)}>
             Modifier
           </button>
@@ -167,14 +152,14 @@ function DashboardCard({ dashboard, onChanged }: { dashboard: Dashboard; onChang
 
 function TeamDashboardCard({ dashboard }: { dashboard: Dashboard }) {
   return (
-    <div className="dashboard-list-card">
+    <div className="dashboard-list-card" style={{ gridColumn: `span ${TILE_SIZE_SPANS[dashboard.cardSize]}` }}>
       <div className="dashboard-list-card-header">
         <Link to={`/dashboards/${dashboard.id}`}>{dashboard.name}</Link>
       </div>
       <p className="dashboard-list-card-meta">
         {dashboard.viewIds.length} vue{dashboard.viewIds.length > 1 ? 's' : ''} · Créé le {new Date(dashboard.createdAt).toLocaleDateString('fr-FR')}
       </p>
-      <DashboardKpiPreview dashboard={dashboard} />
+      <DashboardKpiPreview viewIds={dashboard.viewIds} />
     </div>
   );
 }

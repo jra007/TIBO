@@ -335,11 +335,21 @@ label.button.secondary:hover {
 
 /* ---------- Dashboards ---------- */
 
+/* Fixed 3 columns (not auto-fit) so a card's Petit/Moyen/Grand width (1/2/3 columns, via inline
+   gridColumn) maps to a predictable fraction of the row, same reasoning as .dashboard-grid on a
+   dashboard's own page — an auto-fit column count that varies with viewport width and card count
+   would make "Grand" mean a different thing every time. Collapses to one column below 900px. */
 .dashboard-list-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 16px;
   margin-bottom: 24px;
+}
+
+@media (max-width: 900px) {
+  .dashboard-list-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .dashboard-list-card {
@@ -375,6 +385,12 @@ label.button.secondary:hover {
   padding-top: 4px;
 }
 
+.dashboard-list-card .page-actions select {
+  width: auto;
+  max-width: 100px;
+  margin: 0;
+}
+
 .dashboard-list-card-kpis {
   display: flex;
   flex-wrap: wrap;
@@ -392,30 +408,12 @@ label.button.secondary:hover {
   line-height: 1.1;
 }
 
-/* Matches whatever Petit/Moyen/Grand was chosen for that tile on the dashboard's own page —
-   the base rule above is the 'medium' size, kept as the default for any tile with no entry. */
-.dashboard-list-card-kpi-small .dashboard-list-card-kpi-value {
-  font-size: 15px;
-}
-
-.dashboard-list-card-kpi-large .dashboard-list-card-kpi-value {
-  font-size: 28px;
-}
-
 .dashboard-list-card-kpi-label {
   font-size: 12px;
   color: var(--ink-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.dashboard-list-card-kpi select {
-  width: auto;
-  max-width: 100px;
-  margin-top: 4px;
-  font-size: 12px;
-  padding: 2px 6px;
 }
 
 .visibility-pill {

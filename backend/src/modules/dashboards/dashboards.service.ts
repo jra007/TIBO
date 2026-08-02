@@ -14,6 +14,8 @@ export interface Dashboard {
   name: string;
   viewIds: string[];
   layout: DashboardLayout;
+  /** This dashboard's own width on the /dashboards list page (1/2/3 of a fixed 3-column grid) — distinct from `layout`, which sizes each view tile inside the dashboard's own detail page. */
+  cardSize: DashboardTileSize;
   visibility: ViewVisibility;
   sharedWithGroupId: string | null;
   createdAt: Date;
@@ -25,6 +27,7 @@ interface DashboardRow {
   name: string;
   view_ids: string[];
   layout: DashboardLayout;
+  card_size: DashboardTileSize;
   visibility: ViewVisibility;
   shared_with_group_id: string | null;
   created_at: Date;
@@ -37,6 +40,7 @@ function toDomain(row: DashboardRow): Dashboard {
     name: row.name,
     viewIds: row.view_ids,
     layout: row.layout,
+    cardSize: row.card_size,
     visibility: row.visibility,
     sharedWithGroupId: row.shared_with_group_id,
     createdAt: row.created_at,
@@ -47,7 +51,7 @@ function toDomain(row: DashboardRow): Dashboard {
 export class DashboardsService {
   constructor(@Inject(KNEX_CONNECTION) private readonly knex: Knex) {}
 
-  async create(ownerId: string, name: string, viewIds: string[], layout?: DashboardLayout): Promise<Dashboard> {
+  async create(ownerId: string, name: string, viewIds: string[], layout?: DashboardLayout, cardSize?: DashboardTileSize): Promise<Dashboard> {
     if (viewIds.length > 0) {
       const existing = await this.knex('views').whereIn('id', viewIds).pluck('id');
       const missing = viewIds.filter((id) => !existing.includes(id));
@@ -60,6 +64,7 @@ export class DashboardsService {
         name,
         view_ids: JSON.stringify(viewIds),
         layout: JSON.stringify(layout ?? {}),
+        card_size: cardSize ?? 'medium',
         visibility: 'private',
         shared_with_group_id: null,
       })
@@ -69,11 +74,18 @@ export class DashboardsService {
 
   /**
    * Only the owner can edit their own dashboard — lets the set of included views (and the name)
-   * change after creation. `layout` (per-tile size) is separate from the name/view-selection
-   * form that calls this without ever knowing about layout — omitting it here leaves whatever's
-   * already stored untouched, rather than wiping it back to {} on every unrelated edit.
+   * change after creation. `layout`/`cardSize` are separate from the name/view-selection form
+   * that calls this without ever knowing about either — omitting them here leaves whatever's
+   * already stored untouched, rather than wiping it back to a default on every unrelated edit.
    */
-  async update(dashboardId: string, ownerId: string, name: string, viewIds: string[], layout?: DashboardLayout): Promise<Dashboard> {
+  async update(
+    dashboardId: string,
+    ownerId: string,
+    name: string,
+    viewIds: string[],
+    layout?: DashboardLayout,
+    cardSize?: DashboardTileSize,
+  ): Promise<Dashboard> {
     const existing: DashboardRow | undefined = await this.knex('dashboards').where({ id: dashboardId }).first();
     if (!existing) throw new NotFoundException(`Dashboard ${dashboardId} not found`);
     if (existing.owner_id !== ownerId) throw new ForbiddenException("Vous n'êtes pas propriétaire de ce tableau de bord");
@@ -86,6 +98,7 @@ export class DashboardsService {
 
     const updatePayload: Record<string, unknown> = { name, view_ids: JSON.stringify(viewIds), updated_at: new Date() };
     if (layout !== undefined) updatePayload.layout = JSON.stringify(layout);
+    if (cardSize !== undefined) updatePayload.card_size = cardSize;
 
     const [row]: DashboardRow[] = await this.knex('dashboards').where({ id: dashboardId }).update(updatePayload).returning('*');
     return toDomain(row);
