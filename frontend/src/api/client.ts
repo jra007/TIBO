@@ -37,7 +37,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     handleUnauthorized(response);
     throw new Error(await extractErrorMessage(response, path));
   }
-  return response.json() as Promise<T>;
+  // A handler that returns nothing (e.g. a plain delete) sends an empty body — response.json()
+  // throws on that ("Unexpected end of JSON input"), which without this looked exactly like a
+  // failed request even though the call had already succeeded server-side.
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 async function requestForm<T>(path: string, formData: FormData): Promise<T> {
