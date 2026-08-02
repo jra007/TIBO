@@ -264,6 +264,14 @@ a:hover {
   margin: 0;
 }
 
+/* .page-actions' own margin-top (below) is meant to gap it from whatever precedes it when it's
+   a standalone block (e.g. a form's submit/cancel row) — inside .page-header it sits beside the
+   title in the same flex row instead, where that margin would only push it out of vertical
+   alignment with the h1. */
+.page-header .page-actions {
+  margin-top: 0;
+}
+
 /* An <a>/<Link>/<label> styled to read as a button, e.g. "Créer une vue" or a hidden file input's trigger.
    Padding/border/font-size/weight must match the plain <button> rule exactly — otherwise a Link-as-button
    and a real <button> sitting next to each other (e.g. "Modifier" and an export menu) render at visibly
@@ -888,10 +896,24 @@ li button:hover:not(:disabled) {
   color: var(--critical);
 }
 
+/* align-items defaults to 'stretch', and button's own margin-top (below) is asymmetric with
+   a.button's (which has none) — stretched to the same flex line, a zero-margin item grows to
+   fill the space a sibling's margin ate into, rendering visibly bigger than its button peers
+   (e.g. "Modifier" next to the export menu). Centering here, and moving the top gap from each
+   button onto the row itself, keeps every peer action — link, button, or menu trigger — the
+   same size regardless of which element it happens to be. */
 .page-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.page-actions button,
+.page-actions a.button,
+.page-actions label.button {
+  margin-top: 0;
 }
 
 button.danger {
