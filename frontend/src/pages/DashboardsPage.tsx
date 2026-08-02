@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
-import type { Dashboard, DashboardLayout, DashboardTileSize, Group, SavedView, ViewData } from '../api/types';
+import type { Dashboard, DashboardTileSize, Group, SavedView, ViewData } from '../api/types';
 import { AddKpiForm } from '../components/AddKpiForm';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { EditDashboardForm } from '../components/EditDashboardForm';
 import { useDateSelection } from '../date-selection/DateSelectionContext';
-import { tileSize } from './dashboard-tile-size';
+import { TILE_SIZE_LABELS, tileSize } from './dashboard-tile-size';
 
 interface DashboardKpi {
   id: string;
@@ -19,12 +19,15 @@ interface DashboardKpi {
  * The whole point of a KPI is seeing it at a glance — surfacing it only after opening a
  * dashboard defeated that. Fetches just the dashboard's 'number'-typed views (skips the rest,
  * no need to load full chart data for a card) and shows each as a compact value + label, sized
- * to match the Petit/Moyen/Grand already chosen for that tile on the dashboard's own page —
- * otherwise every KPI here would look identical regardless of that setting.
+ * to match the Petit/Moyen/Grand already chosen for that tile on the dashboard's own page.
+ * `onChanged` present (only for "my" dashboards, not read-only shared ones) also makes the size
+ * editable right here — writes through the same PUT /dashboards/:id the dashboard's own page
+ * uses, so both stay in sync regardless of which one was used to change it.
  */
-function DashboardKpiPreview({ viewIds, layout }: { viewIds: string[]; layout: DashboardLayout }) {
+function DashboardKpiPreview({ dashboard, onChanged }: { dashboard: Dashboard; onChanged?: () => Promise<void> }) {
   const { selectedDate } = useDateSelection();
   const [kpis, setKpis] = useState<DashboardKpi[]>([]);
+  const { viewIds, layout } = dashboard;
 
   useEffect(() => {
     if (!selectedDate || viewIds.length === 0) {
@@ -55,6 +58,16 @@ function DashboardKpiPreview({ viewIds, layout }: { viewIds: string[]; layout: D
     };
   }, [viewIds, layout, selectedDate]);
 
+  async function handleResize(viewId: string, size: DashboardTileSize) {
+    if (!onChanged) return;
+    await apiClient.put(`/dashboards/${dashboard.id}`, {
+      name: dashboard.name,
+      viewIds: dashboard.viewIds,
+      layout: { ...dashboard.layout, [viewId]: { size } },
+    });
+    await onChanged();
+  }
+
   if (kpis.length === 0) return null;
 
   return (
@@ -63,6 +76,20 @@ function DashboardKpiPreview({ viewIds, layout }: { viewIds: string[]; layout: D
         <div className={`dashboard-list-card-kpi dashboard-list-card-kpi-${kpi.size}`} key={kpi.id}>
           <div className="dashboard-list-card-kpi-value">{new Intl.NumberFormat('fr-FR').format(kpi.value)}</div>
           <div className="dashboard-list-card-kpi-label">{kpi.label}</div>
+          {onChanged && (
+            <>
+              <label htmlFor={`kpi-size-${kpi.id}`} className="visually-hidden">
+                Taille de {kpi.label}
+              </label>
+              <select id={`kpi-size-${kpi.id}`} value={kpi.size} onChange={(e) => handleResize(kpi.id, e.target.value as DashboardTileSize)}>
+                {(Object.keys(TILE_SIZE_LABELS) as DashboardTileSize[]).map((option) => (
+                  <option key={option} value={option}>
+                    {TILE_SIZE_LABELS[option]}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
         </div>
       ))}
     </div>
@@ -97,7 +124,7 @@ function DashboardCard({ dashboard, onChanged }: { dashboard: Dashboard; onChang
       <p className="dashboard-list-card-meta">
         {dashboard.viewIds.length} vue{dashboard.viewIds.length > 1 ? 's' : ''} · Créé le {new Date(dashboard.createdAt).toLocaleDateString('fr-FR')}
       </p>
-      <DashboardKpiPreview viewIds={dashboard.viewIds} layout={dashboard.layout} />
+      <DashboardKpiPreview dashboard={dashboard} onChanged={onChanged} />
 
       {error && (
         <p role="alert" className="error">
@@ -147,7 +174,7 @@ function TeamDashboardCard({ dashboard }: { dashboard: Dashboard }) {
       <p className="dashboard-list-card-meta">
         {dashboard.viewIds.length} vue{dashboard.viewIds.length > 1 ? 's' : ''} · Créé le {new Date(dashboard.createdAt).toLocaleDateString('fr-FR')}
       </p>
-      <DashboardKpiPreview viewIds={dashboard.viewIds} layout={dashboard.layout} />
+      <DashboardKpiPreview dashboard={dashboard} />
     </div>
   );
 }

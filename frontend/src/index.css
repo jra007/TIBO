@@ -410,6 +410,14 @@ label.button.secondary:hover {
   text-overflow: ellipsis;
 }
 
+.dashboard-list-card-kpi select {
+  width: auto;
+  max-width: 100px;
+  margin-top: 4px;
+  font-size: 12px;
+  padding: 2px 6px;
+}
+
 .visibility-pill {
   display: inline-block;
   padding: 2px 10px;
