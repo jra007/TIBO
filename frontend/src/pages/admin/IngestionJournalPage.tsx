@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../../api/client';
-import type { CleaningCorrection, CleaningReport, FilePreview, JournalEntry, UploadResponse } from '../../api/types';
+import type { CleanedPreview, CleaningCorrection, FilePreview, JournalEntry, UploadResponse } from '../../api/types';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { CleanedResultPreview } from './CleanedResultPreview';
+import { describeCleaningReport } from './cleaning-report';
 import { IngestionPreviewGrid } from './IngestionPreviewGrid';
 
 interface ReviewState {
@@ -13,23 +15,17 @@ interface ReviewState {
   corrections: Record<string, CleaningCorrection>;
 }
 
+interface CleanedPreviewState extends ReviewState {
+  correction: CleaningCorrection;
+  cleaned: CleanedPreview;
+}
+
 const STATUS_LABELS: Record<JournalEntry['status'], string> = {
   success: 'Succès',
   error: 'Erreur',
   duplicate: 'Doublon rejeté',
   pending_review: 'En attente de validation',
 };
-
-/** Human-readable summary of cleanup (automatic or assisted), for the journal's traceability requirement (nettoyage addendum, section 5). */
-function describeCleaningReport(report: CleaningReport | null): string {
-  if (!report) return '—';
-  const parts: string[] = [];
-  if (report.headerRowIndex > 0) parts.push(`en-tête décalée de ${report.headerRowIndex} ligne(s)`);
-  if (report.droppedColumns.length > 0) parts.push(`${report.droppedColumns.length} colonne(s) supprimée(s)`);
-  if (report.trailingRowsExcluded > 0) parts.push(`${report.trailingRowsExcluded} ligne(s) exclue(s) (fin de fichier)`);
-  if (report.encoding !== 'utf-8') parts.push(`encodage : ${report.encoding}`);
-  return parts.length > 0 ? parts.join(', ') : 'Aucun';
-}
 
 const DATE_PRESETS = [
   { value: 'all', label: 'Toutes les dates' },
@@ -70,6 +66,8 @@ export function IngestionJournalPage() {
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [currentReview, setCurrentReview] = useState<ReviewState | null>(null);
+  const [cleanedPreview, setCleanedPreview] = useState<CleanedPreviewState | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   useEffect(() => {
     loadJournal();
@@ -118,12 +116,25 @@ export function IngestionJournalPage() {
     }
   }
 
+  /**
+   * Rather than committing the correction straight away, fetch and show the real cleaned result it
+   * produces (headers applied, columns/rows already removed) — so a data admin can catch a bad
+   * correction (e.g. the wrong trailing cutoff wiping out real data) before the import runs, not
+   * just the raw rows they picked it from.
+   */
   async function handleConfirmReview(correction: CleaningCorrection) {
     if (!currentReview) return;
-    const updatedCorrections = { ...currentReview.corrections, [currentReview.file.name]: correction };
-    setCurrentReview(null);
-    setUploading(true);
-    await advanceQueue(currentReview.remainingQueue, currentReview.allFiles, updatedCorrections);
+    setPreviewError(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', currentReview.file);
+      formData.append('correction', JSON.stringify(correction));
+      const cleaned = await apiClient.postForm<CleanedPreview>('/ingestion/preview-cleaned', formData);
+      setCleanedPreview({ ...currentReview, correction, cleaned });
+      setCurrentReview(null);
+    } catch {
+      setPreviewError(`Échec de l'aperçu nettoyé pour ${currentReview.file.name}.`);
+    }
   }
 
   async function handleCancelReview() {
@@ -132,6 +143,29 @@ export function IngestionJournalPage() {
     setCurrentReview(null);
     setUploading(true);
     await advanceQueue(currentReview.remainingQueue, updatedAllFiles, currentReview.corrections);
+  }
+
+  function handleBackToCorrection() {
+    if (!cleanedPreview) return;
+    const { correction: _correction, cleaned: _cleaned, ...reviewState } = cleanedPreview;
+    setCurrentReview(reviewState);
+    setCleanedPreview(null);
+  }
+
+  async function handleConfirmCleanedPreview() {
+    if (!cleanedPreview) return;
+    const updatedCorrections = { ...cleanedPreview.corrections, [cleanedPreview.file.name]: cleanedPreview.correction };
+    setCleanedPreview(null);
+    setUploading(true);
+    await advanceQueue(cleanedPreview.remainingQueue, cleanedPreview.allFiles, updatedCorrections);
+  }
+
+  async function handleCancelCleanedPreview() {
+    if (!cleanedPreview) return;
+    const updatedAllFiles = cleanedPreview.allFiles.filter((f) => f !== cleanedPreview.file);
+    setCleanedPreview(null);
+    setUploading(true);
+    await advanceQueue(cleanedPreview.remainingQueue, updatedAllFiles, cleanedPreview.corrections);
   }
 
   async function finalizeUpload(allFiles: File[], corrections: Record<string, CleaningCorrection>) {
@@ -214,8 +248,24 @@ export function IngestionJournalPage() {
         </p>
       )}
 
+      {previewError && (
+        <p role="alert" className="error">
+          {previewError}
+        </p>
+      )}
+
       {currentReview && (
         <IngestionPreviewGrid fileName={currentReview.file.name} preview={currentReview.preview} onConfirm={handleConfirmReview} onCancel={handleCancelReview} />
+      )}
+
+      {cleanedPreview && (
+        <CleanedResultPreview
+          fileName={cleanedPreview.file.name}
+          cleaned={cleanedPreview.cleaned}
+          onConfirm={handleConfirmCleanedPreview}
+          onBack={handleBackToCorrection}
+          onCancel={handleCancelCleanedPreview}
+        />
       )}
 
       {result && (

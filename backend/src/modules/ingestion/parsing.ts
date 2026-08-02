@@ -139,7 +139,7 @@ export function parseSpreadsheet(
   buffer: Buffer,
   fileName: string,
   correction?: CleaningCorrection,
-): { rows: Record<string, unknown>[]; report: CleaningReport } {
+): { rows: Record<string, unknown>[]; headers: string[]; report: CleaningReport } {
   const { grid, encoding } = buildGrid(buffer, fileName);
 
   const headerRowIndex = correction
@@ -176,9 +176,11 @@ export function parseSpreadsheet(
     });
     return record;
   });
+  const keptHeaders = headers.filter((_, index) => !droppedIndexes.has(index));
 
   return {
     rows,
+    headers: keptHeaders,
     report: {
       encoding,
       headerRowIndex,

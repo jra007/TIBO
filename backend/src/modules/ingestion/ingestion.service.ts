@@ -44,6 +44,7 @@ export interface JournalEntry {
 }
 
 const BATCH_SIZE = 500;
+const CLEANED_PREVIEW_ROW_LIMIT = 50;
 
 function addColumn(
   table: Knex.CreateTableBuilder,
@@ -108,6 +109,33 @@ export class IngestionService {
       suggestedHeaderRowIndex,
       rows,
       totalRows,
+    };
+  }
+
+  /**
+   * The actual cleaned result a correction would produce (headers applied, columns/rows already
+   * removed, values trimmed) — never touches the database. Distinct from previewFile's raw grid:
+   * this is what the assisted-correction flow shows *after* a correction is picked, so a data
+   * admin can see the real outcome before the import actually runs, not just the raw rows they
+   * picked a header/exclusions from. Capped to CLEANED_PREVIEW_ROW_LIMIT rows — same reasoning as
+   * previewGrid's head+tail cap, a large import's full cleaned table would be impractical to show.
+   */
+  previewCleanedFile(
+    fileName: string,
+    buffer: Buffer,
+    correction?: CleaningCorrection,
+  ): {
+    headers: string[];
+    rows: Record<string, unknown>[];
+    totalRows: number;
+    report: CleaningReport;
+  } {
+    const { rows, headers, report } = parseSpreadsheet(buffer, fileName, correction);
+    return {
+      headers,
+      rows: rows.slice(0, CLEANED_PREVIEW_ROW_LIMIT),
+      totalRows: rows.length,
+      report,
     };
   }
 

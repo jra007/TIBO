@@ -40,6 +40,14 @@ export interface CleaningCorrection {
   excludedColumnIndexes: number[];
 }
 
+/** The actual cleaned table a correction produces — shown before the real import runs. `rows` is capped (see backend CLEANED_PREVIEW_ROW_LIMIT); `totalRows` is the true final row count. */
+export interface CleanedPreview {
+  headers: string[];
+  rows: Record<string, unknown>[];
+  totalRows: number;
+  report: CleaningReport;
+}
+
 export interface JournalEntry {
   id: string;
   fileName: string;

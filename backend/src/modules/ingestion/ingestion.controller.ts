@@ -38,6 +38,17 @@ export class IngestionController {
   }
 
   /**
+   * The real cleaned result a correction would produce, shown after the assisted-correction grid
+   * and before the actual import — never touches the database (see IngestionService.previewCleanedFile).
+   */
+  @Post('preview-cleaned')
+  @UseInterceptors(FileInterceptor('file'))
+  previewCleaned(@UploadedFile() file: Express.Multer.File, @Body('correction') correctionJson: string | undefined) {
+    const correction: CleaningCorrection | undefined = correctionJson ? JSON.parse(correctionJson) : undefined;
+    return this.ingestionService.previewCleanedFile(file.originalname, file.buffer, correction);
+  }
+
+  /**
    * `corrections` (optional) is a JSON-encoded map of file name -> CleaningCorrection, for files
    * the user just reviewed in the preview grid — see IngestionService.ingestFile for how a
    * provided correction is memorized for future imports of the same file name.
