@@ -25,7 +25,9 @@ function PolicyRow({ policy, onSaved }: { policy: RetentionPolicy; onSaved: () =
     <tr>
       <td>{policy.dataType}</td>
       <td>
-        <label htmlFor={`duration-${policy.dataType}`}>Durée</label>
+        <label htmlFor={`duration-${policy.dataType}`} className="visually-hidden">
+          Durée
+        </label>
         <input
           id={`duration-${policy.dataType}`}
           type="number"
@@ -35,7 +37,9 @@ function PolicyRow({ policy, onSaved }: { policy: RetentionPolicy; onSaved: () =
         />
       </td>
       <td>
-        <label htmlFor={`unit-${policy.dataType}`}>Unité</label>
+        <label htmlFor={`unit-${policy.dataType}`} className="visually-hidden">
+          Unité
+        </label>
         <select id={`unit-${policy.dataType}`} value={unit} onChange={(e) => setUnit(e.target.value as RetentionUnit)}>
           {UNITS.map((u) => (
             <option key={u} value={u}>
@@ -45,7 +49,9 @@ function PolicyRow({ policy, onSaved }: { policy: RetentionPolicy; onSaved: () =
         </select>
       </td>
       <td>
-        <label htmlFor={`status-${policy.dataType}`}>Statut</label>
+        <label htmlFor={`status-${policy.dataType}`} className="visually-hidden">
+          Statut
+        </label>
         <select id={`status-${policy.dataType}`} value={status} onChange={(e) => setStatus(e.target.value as RetentionStatus)}>
           {STATUSES.map((s) => (
             <option key={s} value={s}>
