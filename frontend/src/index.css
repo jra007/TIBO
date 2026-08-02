@@ -284,6 +284,43 @@ label.button:hover {
   text-decoration: none;
 }
 
+/* Secondary look for an <a>/<label> button, matching button.secondary — for a peer action
+   that isn't the one primary CTA (e.g. a file-picker trigger sitting next to other controls). */
+a.button.secondary,
+label.button.secondary {
+  background: var(--surface-raised);
+  color: var(--ink);
+  border: 1px solid var(--border-strong);
+  font-weight: 500;
+}
+
+a.button.secondary:hover,
+label.button.secondary:hover {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* A page header's action row (e.g. "Modifier" + the export menu) is a set of peer utility
+   actions, not a single primary call-to-action — every action in it reads consistently as
+   secondary, whether it's a <button>, an <a class="button">, or a dropdown trigger. A page's
+   one true primary CTA (e.g. "+ Créer une vue") sits directly in .page-header, not inside a
+   nested .page-actions group, so it's untouched by this rule. */
+.page-header .page-actions > a.button,
+.page-header .page-actions > button:not(.danger):not(.secondary) {
+  background: var(--surface-raised);
+  color: var(--ink);
+  border: 1px solid var(--border-strong);
+  font-weight: 500;
+}
+
+.page-header .page-actions > a.button:hover,
+.page-header .page-actions > button:not(.danger):not(.secondary):hover:not(:disabled) {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* ---------- Dashboards ---------- */
 
 .dashboard-list-grid {
@@ -401,46 +438,165 @@ label.button:hover {
   margin: 0;
 }
 
-/* ---------- Appearance ---------- */
+/* ---------- Settings pages (Apparence, Rapport, ...): a plain label/description + control
+   list, matching the rest of the app's settings pages (Rétention, RBAC, ...) rather than a
+   grid of competing bordered cards. */
 
-.appearance-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 16px;
+.settings-list {
+  display: flex;
+  flex-direction: column;
 }
 
-.appearance-card {
-  background: var(--surface-raised);
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-list > .settings-row:first-child {
+  padding-top: 0;
+}
+
+.settings-list > .settings-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.settings-row-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-row-info h3 {
+  margin: 0 0 2px;
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--ink);
+}
+
+.settings-row-info p {
+  margin: 0;
+  font-size: 13px;
+  max-width: 46ch;
+}
+
+.settings-row-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.settings-row-control input[type='color'] {
+  width: 40px;
+  height: 32px;
+  padding: 2px;
+  flex-shrink: 0;
+}
+
+.settings-row-control button,
+.settings-row-control label.button {
+  margin: 0;
+}
+
+.settings-color-value {
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  color: var(--ink-secondary);
+  min-width: 7ch;
+}
+
+.settings-image-preview {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-}
-
-.appearance-card h3 {
-  margin-top: 0;
-}
-
-.appearance-preview {
-  width: 96px;
-  height: 96px;
-  border: 1px dashed var(--border-strong);
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 12px;
   overflow: hidden;
+  background: var(--surface-raised);
 }
 
-.appearance-preview img {
+.settings-image-preview img {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
 }
 
-.appearance-preview-empty {
+.settings-image-preview-empty {
   color: var(--ink-muted);
-  font-size: 12px;
+  font-size: 9px;
+  text-align: center;
+}
+
+.settings-inline-form {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.settings-inline-form input {
+  margin: 0;
+  max-width: 220px;
+}
+
+.settings-inline-form button {
+  margin: 0;
+}
+
+/* A checkbox styled as an on/off switch, for a settings row's toggle — clearer at a glance
+   than a plain checkbox once it's the only control in the row. */
+.settings-toggle {
+  display: inline-flex;
+  margin: 0;
+}
+
+.settings-toggle input[type='checkbox'] {
+  appearance: none;
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--border-strong);
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.settings-toggle input[type='checkbox']::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  box-shadow: 0 1px 2px rgba(11, 11, 11, 0.2);
+  transition: transform 0.15s;
+}
+
+.settings-toggle input[type='checkbox']:checked {
+  background: var(--accent);
+}
+
+.settings-toggle input[type='checkbox']:checked::before {
+  transform: translateX(16px);
+}
+
+.settings-toggle input[type='checkbox']:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ---------- Login ---------- */
