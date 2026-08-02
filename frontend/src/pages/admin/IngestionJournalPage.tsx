@@ -1,8 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../../api/client';
-import type { CleaningReport, JournalEntry, UploadResponse } from '../../api/types';
+import type { CleaningCorrection, CleaningReport, FilePreview, JournalEntry, UploadResponse } from '../../api/types';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { IngestionPreviewGrid } from './IngestionPreviewGrid';
+
+interface ReviewState {
+  file: File;
+  preview: FilePreview;
+  remainingQueue: File[];
+  allFiles: File[];
+  corrections: Record<string, CleaningCorrection>;
+}
 
 /** Human-readable summary of automatic cleanup, for the journal's traceability requirement (nettoyage addendum, section 5). */
 function describeCleaningReport(report: CleaningReport | null): string {
@@ -52,6 +61,7 @@ export function IngestionJournalPage() {
   const [datePreset, setDatePreset] = useState<DatePreset>('all');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
+  const [currentReview, setCurrentReview] = useState<ReviewState | null>(null);
 
   useEffect(() => {
     loadJournal();
@@ -65,12 +75,65 @@ export function IngestionJournalPage() {
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (!files || files.length === 0) return;
-
-    const formData = new FormData();
-    for (const file of files) formData.append('files', file);
-
     setUploading(true);
     setError(null);
+    setResult(null);
+    const fileArray = Array.from(files);
+    await advanceQueue(fileArray, fileArray, {});
+  }
+
+  /**
+   * Checks each selected file, one at a time: a file with a memorized cleaning rule (see
+   * IngestionPreviewGrid) goes straight through, an unseen or ambiguous file pauses here and
+   * shows the review grid — the real import only happens once every file has been resolved one
+   * way or the other (addendum section 3: preview only when needed, never on every import).
+   */
+  async function advanceQueue(queue: File[], allFiles: File[], corrections: Record<string, CleaningCorrection>) {
+    if (queue.length === 0) {
+      await finalizeUpload(allFiles, corrections);
+      return;
+    }
+    const [next, ...rest] = queue;
+    try {
+      const previewForm = new FormData();
+      previewForm.append('file', next);
+      const preview = await apiClient.postForm<FilePreview>('/ingestion/preview', previewForm);
+      if (preview.hasMemorizedRule) {
+        await advanceQueue(rest, allFiles, corrections);
+      } else {
+        setCurrentReview({ file: next, preview, remainingQueue: rest, allFiles, corrections });
+        setUploading(false);
+      }
+    } catch {
+      setError(`Échec de l'aperçu pour ${next.name}.`);
+      setUploading(false);
+    }
+  }
+
+  async function handleConfirmReview(correction: CleaningCorrection) {
+    if (!currentReview) return;
+    const updatedCorrections = { ...currentReview.corrections, [currentReview.file.name]: correction };
+    setCurrentReview(null);
+    setUploading(true);
+    await advanceQueue(currentReview.remainingQueue, currentReview.allFiles, updatedCorrections);
+  }
+
+  async function handleCancelReview() {
+    if (!currentReview) return;
+    const updatedAllFiles = currentReview.allFiles.filter((f) => f !== currentReview.file);
+    setCurrentReview(null);
+    setUploading(true);
+    await advanceQueue(currentReview.remainingQueue, updatedAllFiles, currentReview.corrections);
+  }
+
+  async function finalizeUpload(allFiles: File[], corrections: Record<string, CleaningCorrection>) {
+    if (allFiles.length === 0) {
+      setUploading(false);
+      return;
+    }
+    const formData = new FormData();
+    for (const file of allFiles) formData.append('files', file);
+    formData.append('corrections', JSON.stringify(corrections));
     try {
       const response = await apiClient.postForm<UploadResponse>('/ingestion/upload', formData);
       setResult(response);
@@ -141,6 +204,10 @@ export function IngestionJournalPage() {
         <p role="alert" className="error">
           {error}
         </p>
+      )}
+
+      {currentReview && (
+        <IngestionPreviewGrid fileName={currentReview.file.name} preview={currentReview.preview} onConfirm={handleConfirmReview} onCancel={handleCancelReview} />
       )}
 
       {result && (

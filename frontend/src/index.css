@@ -809,6 +809,58 @@ tbody tr:hover {
   font-size: 12px;
 }
 
+.ingestion-preview {
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+}
+
+.ingestion-preview h3 {
+  margin-top: 0;
+}
+
+.preview-grid {
+  font-size: 13px;
+}
+
+.preview-grid td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.preview-row-actions {
+  display: flex;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.preview-row-actions button {
+  font-size: 11px;
+  padding: 3px 6px;
+  margin: 0;
+}
+
+.preview-header-row {
+  background: var(--accent-bg);
+}
+
+.preview-excluded-row {
+  background: var(--critical-bg);
+  color: var(--ink-muted);
+  text-decoration: line-through;
+}
+
+.preview-column-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 12px;
+  font-size: 13px;
+}
+
 /* ---------- View builder ---------- */
 
 .shelves-column {

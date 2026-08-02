@@ -15,6 +15,27 @@ export interface IngestionResult {
   cleaningReport: CleaningReport | null;
 }
 
+export interface PreviewRow {
+  /** Absolute position in the file's raw grid — a header/exclude selection references this. */
+  index: number;
+  cells: unknown[];
+}
+
+export interface FilePreview {
+  hasMemorizedRule: boolean;
+  suggestedHeaderRowIndex: number;
+  /** Present only when hasMemorizedRule is false — a file with a memorized rule needs no review. */
+  rows?: PreviewRow[];
+  totalRows?: number;
+}
+
+/** A validated correction for a file the automatic heuristic couldn't confidently resolve. `trailingRowsToExclude` is a count (not an absolute index) so it survives the file's row count varying day to day — see the backend's CleaningCorrection for why. */
+export interface CleaningCorrection {
+  headerRowIndex: number;
+  trailingRowsToExclude: number;
+  excludedColumnIndexes: number[];
+}
+
 export interface JournalEntry {
   id: string;
   fileName: string;

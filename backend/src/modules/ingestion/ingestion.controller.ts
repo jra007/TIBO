@@ -1,10 +1,23 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Req, UploadedFiles, UseInterceptors } from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Req,
+  UploadedFile,
+  UploadedFiles,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import type { AuthenticatedRequest } from '../auth/authenticated-request';
 import { RequirePermission } from '../rbac/decorators/require-permission.decorator';
 import { ColumnProfilerService } from '../relations/column-profiler.service';
 import { RelationsService } from '../relations/relations.service';
 import { IngestionService } from './ingestion.service';
+import type { CleaningCorrection } from './parsing';
 
 @Controller('ingestion')
 export class IngestionController {
@@ -14,12 +27,48 @@ export class IngestionController {
     private readonly columnProfiler: ColumnProfilerService,
   ) {}
 
+  /**
+   * Grid preview before anything is committed — the assisted-correction UI calls this once per
+   * file before the real upload, to decide whether it needs to show a review step.
+   */
+  @Post('preview')
+  @UseInterceptors(FileInterceptor('file'))
+  async preview(@UploadedFile() file: Express.Multer.File) {
+    return this.ingestionService.previewFile(file.originalname, file.buffer);
+  }
+
+  /**
+   * `corrections` (optional) is a JSON-encoded map of file name -> CleaningCorrection, for files
+   * the user just reviewed in the preview grid — see IngestionService.ingestFile for how a
+   * provided correction is memorized for future imports of the same file name.
+   */
   @Post('upload')
   @UseInterceptors(FilesInterceptor('files'))
-  async upload(@UploadedFiles() files: Express.Multer.File[]) {
-    const imports = await Promise.all(files.map((file) => this.ingestionService.ingestFile(file.originalname, file.buffer)));
-    const importedTables = imports.filter((r) => r.status === 'success').map((r) => r.tableName);
-    const relations = importedTables.length > 0 ? await this.relationsService.detectRelations() : [];
+  async upload(
+    @UploadedFiles() files: Express.Multer.File[],
+    @Body('corrections') correctionsJson: string | undefined,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const corrections: Record<string, CleaningCorrection> = correctionsJson
+      ? JSON.parse(correctionsJson)
+      : {};
+    const imports = await Promise.all(
+      files.map((file) =>
+        this.ingestionService.ingestFile(
+          file.originalname,
+          file.buffer,
+          req.user.id,
+          corrections[file.originalname],
+        ),
+      ),
+    );
+    const importedTables = imports
+      .filter((r) => r.status === 'success')
+      .map((r) => r.tableName);
+    const relations =
+      importedTables.length > 0
+        ? await this.relationsService.detectRelations()
+        : [];
     return { imports, relations };
   }
 
@@ -44,7 +93,10 @@ export class IngestionController {
   /** Bulk-deletes selected journal entries (e.g. duplicate imports of the same file) — history cleanup only, see the service for why this never touches actual data. */
   @Delete('journal')
   @RequirePermission('ingestion:manage')
-  deleteJournalEntries(@Body('ids') ids: string[], @Req() req: AuthenticatedRequest) {
+  deleteJournalEntries(
+    @Body('ids') ids: string[],
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.ingestionService.deleteJournalEntries(ids, req.user.id);
   }
 
@@ -57,6 +109,11 @@ export class IngestionController {
     @Body('label') label: string,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.ingestionService.setColumnLabel(tableName, columnName, label, req.user.id);
+    return this.ingestionService.setColumnLabel(
+      tableName,
+      columnName,
+      label,
+      req.user.id,
+    );
   }
 }

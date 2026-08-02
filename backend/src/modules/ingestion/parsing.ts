@@ -61,10 +61,27 @@ function trimIfString(value: unknown): unknown {
   return typeof value === 'string' ? value.trim() : value;
 }
 
-export function parseSpreadsheet(
+/**
+ * A data-admin-validated correction for a file that the automatic heuristic couldn't confidently
+ * resolve — see the assisted-correction flow (nettoyage addendum, section 3).
+ *
+ * `trailingRowsToExclude` is a count, not an absolute row index: a recurring daily export's row
+ * count varies with data volume, so a trailing total/comment row sits at a different absolute
+ * position each day. Storing "drop the last N rows of data" survives that variation; an absolute
+ * index (the file's row N) would silently start excluding real data instead the day the row count
+ * changes. Column indexes don't have this problem — a file's column layout is stable across
+ * imports even when its row count isn't — so those stay absolute.
+ */
+export interface CleaningCorrection {
+  headerRowIndex: number;
+  trailingRowsToExclude: number;
+  excludedColumnIndexes: number[];
+}
+
+function buildGrid(
   buffer: Buffer,
   fileName: string,
-): { rows: Record<string, unknown>[]; report: CleaningReport } {
+): { grid: unknown[][]; encoding: 'utf-8' | 'latin1' } {
   let workbook: XLSX.WorkBook;
   let encoding: 'utf-8' | 'latin1' = 'utf-8';
 
@@ -83,12 +100,50 @@ export function parseSpreadsheet(
     defval: null,
     raw: true,
   });
+  return { grid, encoding };
+}
 
-  const headerRowIndex = detectHeaderRowIndex(grid);
+const PREVIEW_HEAD_ROWS = 25;
+const PREVIEW_TAIL_ROWS = 10;
+
+export interface PreviewRow {
+  /** Absolute position in the raw grid — a manual header/exclude selection references this, not the row's position within the (possibly head+tail-only) preview list. */
+  index: number;
+  cells: unknown[];
+}
+
+/** Grid preview for the assisted-correction UI (never touches the database) — head+tail only, since the rows needing a decision (a title row, a total row) are always at the edges of the file, and showing the full grid for a large import would be impractical. */
+export function previewGrid(
+  buffer: Buffer,
+  fileName: string,
+): { rows: PreviewRow[]; totalRows: number; suggestedHeaderRowIndex: number } {
+  const { grid } = buildGrid(buffer, fileName);
+  const suggestedHeaderRowIndex = detectHeaderRowIndex(grid);
+  const indexed: PreviewRow[] = grid.map((cells, index) => ({ index, cells }));
+  const rows =
+    indexed.length <= PREVIEW_HEAD_ROWS + PREVIEW_TAIL_ROWS
+      ? indexed
+      : [
+          ...indexed.slice(0, PREVIEW_HEAD_ROWS),
+          ...indexed.slice(-PREVIEW_TAIL_ROWS),
+        ];
+  return { rows, totalRows: grid.length, suggestedHeaderRowIndex };
+}
+
+export function parseSpreadsheet(
+  buffer: Buffer,
+  fileName: string,
+  correction?: CleaningCorrection,
+): { rows: Record<string, unknown>[]; report: CleaningReport } {
+  const { grid, encoding } = buildGrid(buffer, fileName);
+
+  const headerRowIndex = correction
+    ? correction.headerRowIndex
+    : detectHeaderRowIndex(grid);
   const headerRow = grid[headerRowIndex] ?? [];
-  const dataRows = grid
-    .slice(headerRowIndex + 1)
-    .filter((row) => nonEmptyCount(row) > 0);
+  const trailingRowsToExclude = correction?.trailingRowsToExclude ?? 0;
+  const nonEmptyDataRows = grid.slice(headerRowIndex + 1).filter((row) => nonEmptyCount(row) > 0);
+  const dataRows = trailingRowsToExclude > 0 ? nonEmptyDataRows.slice(0, -trailingRowsToExclude) : nonEmptyDataRows;
 
   const headers = headerRow.map((cell, index) =>
     cell === null || cell === undefined || cell === ''
@@ -96,8 +151,10 @@ export function parseSpreadsheet(
       : String(cell).trim(),
   );
 
-  // Entirely-blank columns: every data row has a null/empty cell at that index.
-  const droppedIndexes = new Set<number>();
+  // Entirely-blank columns: every data row has a null/empty cell at that index. A manually
+  // excluded column (correction.excludedColumnIndexes) is dropped the same way.
+  const excludedColumns = new Set(correction?.excludedColumnIndexes ?? []);
+  const droppedIndexes = new Set<number>(excludedColumns);
   for (let col = 0; col < headers.length; col++) {
     const allBlank = dataRows.every((row) => {
       const cell = row[col];

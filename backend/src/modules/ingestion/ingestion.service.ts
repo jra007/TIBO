@@ -10,7 +10,10 @@ import {
   normalizeTableName,
   normalizeValue,
   parseSpreadsheet,
+  previewGrid,
+  type CleaningCorrection,
   type CleaningReport,
+  type PreviewRow,
 } from './parsing';
 
 export type ColumnType = 'text' | 'date' | 'numeric' | 'boolean';
@@ -65,7 +68,48 @@ export class IngestionService {
     private readonly auditService: AuditService,
   ) {}
 
-  async ingestFile(fileName: string, buffer: Buffer): Promise<IngestionResult> {
+  /**
+   * Grid preview for the assisted-correction UI, before anything is committed (nettoyage
+   * addendum, section 3). If a data admin already validated this exact file name before, the
+   * memorized rule is reapplied automatically and no review is needed — only a never-seen file
+   * gets a grid back.
+   */
+  async previewFile(
+    fileName: string,
+    buffer: Buffer,
+  ): Promise<{
+    hasMemorizedRule: boolean;
+    suggestedHeaderRowIndex: number;
+    rows?: PreviewRow[];
+    totalRows?: number;
+  }> {
+    const existingRule = await this.knex('ingestion_cleaning_rules')
+      .where({ file_name: fileName })
+      .first();
+    if (existingRule) {
+      return {
+        hasMemorizedRule: true,
+        suggestedHeaderRowIndex: existingRule.header_row_index,
+      };
+    }
+    const { rows, totalRows, suggestedHeaderRowIndex } = previewGrid(
+      buffer,
+      fileName,
+    );
+    return {
+      hasMemorizedRule: false,
+      suggestedHeaderRowIndex,
+      rows,
+      totalRows,
+    };
+  }
+
+  async ingestFile(
+    fileName: string,
+    buffer: Buffer,
+    actorUserId: string,
+    correction?: CleaningCorrection,
+  ): Promise<IngestionResult> {
     const fileHash = createHash('sha256').update(buffer).digest('hex');
     const tableName = normalizeTableName(fileName);
 
@@ -91,11 +135,50 @@ export class IngestionService {
       return result;
     }
 
+    // A correction submitted with this upload means the user just reviewed and validated the
+    // file's structure in the preview grid — memorize it so future imports of the same file name
+    // skip the preview and reapply it automatically. Otherwise, look up whichever rule (if any)
+    // was memorized previously.
+    let effectiveCorrection = correction;
+    if (correction) {
+      await this.knex('ingestion_cleaning_rules')
+        .insert({
+          file_name: fileName,
+          header_row_index: correction.headerRowIndex,
+          trailing_rows_to_exclude: correction.trailingRowsToExclude,
+          excluded_column_indexes: JSON.stringify(
+            correction.excludedColumnIndexes,
+          ),
+          created_by: actorUserId,
+        })
+        .onConflict('file_name')
+        .merge({
+          header_row_index: correction.headerRowIndex,
+          trailing_rows_to_exclude: correction.trailingRowsToExclude,
+          excluded_column_indexes: JSON.stringify(
+            correction.excludedColumnIndexes,
+          ),
+          updated_at: new Date(),
+        });
+    } else {
+      const existingRule = await this.knex('ingestion_cleaning_rules')
+        .where({ file_name: fileName })
+        .first();
+      if (existingRule) {
+        effectiveCorrection = {
+          headerRowIndex: existingRule.header_row_index,
+          trailingRowsToExclude: existingRule.trailing_rows_to_exclude,
+          excludedColumnIndexes: existingRule.excluded_column_indexes,
+        };
+      }
+    }
+
     try {
       const { rowCount, report } = await this.loadIntoTable(
         tableName,
         buffer,
         fileName,
+        effectiveCorrection,
       );
       const result: IngestionResult = {
         fileName,
@@ -136,8 +219,9 @@ export class IngestionService {
     tableName: string,
     buffer: Buffer,
     fileName: string,
+    correction?: CleaningCorrection,
   ): Promise<{ rowCount: number; report: CleaningReport }> {
-    const { rows, report } = parseSpreadsheet(buffer, fileName);
+    const { rows, report } = parseSpreadsheet(buffer, fileName, correction);
     if (rows.length === 0)
       throw new Error('Fichier vide ou format non reconnu');
 
