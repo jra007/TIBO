@@ -264,15 +264,19 @@ a:hover {
   margin: 0;
 }
 
-/* An <a>/<Link>/<label> styled to read as a button, e.g. "Créer une vue" or a hidden file input's trigger */
+/* An <a>/<Link>/<label> styled to read as a button, e.g. "Créer une vue" or a hidden file input's trigger.
+   Padding/border/font-size/weight must match the plain <button> rule exactly — otherwise a Link-as-button
+   and a real <button> sitting next to each other (e.g. "Modifier" and an export menu) render at visibly
+   different sizes despite looking like peer actions. */
 a.button,
 label.button {
   display: inline-block;
   color: var(--accent-ink);
   background: var(--accent);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  padding: 8px 16px;
-  font-weight: 600;
+  padding: 8px 14px;
+  font-weight: 500;
   font-size: 14px;
   text-decoration: none;
   cursor: pointer;
@@ -759,7 +763,10 @@ button {
   font-size: 14px;
   color: var(--accent-ink);
   background: var(--accent);
-  border: none;
+  /* A transparent border, not none: .secondary/.danger/td-scoped variants below add a real
+     1px border-color — reserving the width here up front means switching between variants
+     never changes a button's rendered size. */
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   padding: 8px 14px;
   cursor: pointer;
