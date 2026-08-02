@@ -166,9 +166,24 @@ export async function buildViewDataQuery(
     const hasDateIngestion = await knex.schema.hasColumn(table, 'date_ingestion');
     if (!hasDateIngestion) continue;
 
-    const effectiveDate = selectedDate ?? (await resolveLatestDate(knex, table));
-    if (!effectiveDate) continue; // table has no rows yet — nothing to filter
-    query = query.andWhere(`${table}.date_ingestion`, effectiveDate).andWhere(`${table}.is_obsolete`, false);
+    // Each table resolves its OWN effective date independently — never an exact match on the
+    // globally-selected date applied uniformly. Source files are re-ingested on their own,
+    // uncoordinated schedules (one file re-uploaded today, others not touched in days), so
+    // requiring every joined table to have a row on the exact same day would empty out any
+    // multi-table view the moment just one of its tables gets ahead of the others. "As of" the
+    // selected date means each table's own latest data at or before that date.
+    const effectiveDate = await resolveLatestDate(knex, table, selectedDate);
+    if (effectiveDate) {
+      query = query.andWhere(`${table}.date_ingestion`, effectiveDate).andWhere(`${table}.is_obsolete`, false);
+    } else if (selectedDate) {
+      // A specific date was requested and this table has no data at or before it: the table
+      // genuinely contributes nothing to this query. Skipping the filter here (as when there's no
+      // selectedDate and the table is simply empty) would wrongly join in its *entire* unfiltered
+      // history instead of correctly returning no rows for it.
+      query = query.whereRaw('1 = 0');
+    }
+    // else: no selectedDate given and the table has no rows at all yet — nothing to filter, an
+    // empty table is empty either way.
   }
 
   const realFields = fields.filter((f) => f.tableName !== CALCULATED_FIELD_TABLE);
@@ -246,9 +261,11 @@ function connectsToJoined(relation: RelationRow, joined: Set<string>, candidate:
   return (joined.has(relation.source_table) && relation.target_table === candidate) || (joined.has(relation.target_table) && relation.source_table === candidate);
 }
 
-/** A table's own most recent import day — the fallback when no global date was explicitly selected. */
-async function resolveLatestDate(knex: Knex, table: string): Promise<string | null> {
-  const row = await knex(table).max('date_ingestion as d').first();
+/** A table's own most recent import day at or before `atOrBefore` (or its most recent day ever, if `atOrBefore` is undefined). */
+async function resolveLatestDate(knex: Knex, table: string, atOrBefore?: string): Promise<string | null> {
+  const query = knex(table).max('date_ingestion as d');
+  if (atOrBefore) query.where('date_ingestion', '<=', atOrBefore);
+  const row = await query.first();
   const value = row?.d as string | Date | null | undefined;
   if (!value) return null;
   return value instanceof Date ? value.toISOString().slice(0, 10) : value;
