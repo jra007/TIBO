@@ -30,9 +30,14 @@ export const OPERATOR_LABELS: Record<FilterOperator, string> = {
   between: 'entre',
 };
 
-/** Which comparisons make sense for a column's type — e.g. no "contient" on a date, no range on text. */
+/**
+ * Which comparisons make sense for a column's type — e.g. no "contient" on a date, no range on
+ * text. Order matters: defaultFilterValue picks the first entry, and for text "contient" comes
+ * first so a newly added filter matches on partial text right away — "égal à" would otherwise
+ * require typing the value out in full before anything matches.
+ */
 export function operatorsForDtype(dtype: ColumnType): FilterOperator[] {
-  if (dtype === 'text') return ['eq', 'neq', 'contains'];
+  if (dtype === 'text') return ['contains', 'eq', 'neq'];
   if (dtype === 'boolean') return ['eq'];
   return ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'between'];
 }
