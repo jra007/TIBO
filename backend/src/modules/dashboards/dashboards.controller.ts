@@ -59,4 +59,10 @@ export class DashboardsController {
   delete(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     return this.dashboardsService.delete(id, req.user.id);
   }
+
+  @Post(':id/reorder')
+  @RequirePermission('view:create')
+  reorder(@Param('id') id: string, @Req() req: AuthenticatedRequest, @Body('direction') direction: 'up' | 'down') {
+    return this.dashboardsService.reorder(id, req.user.id, direction);
+  }
 }

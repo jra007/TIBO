@@ -66,7 +66,17 @@ function DashboardKpiPreview({ viewIds }: { viewIds: string[] }) {
   );
 }
 
-function DashboardCard({ dashboard, onChanged }: { dashboard: Dashboard; onChanged: () => Promise<void> }) {
+function DashboardCard({
+  dashboard,
+  isFirst,
+  isLast,
+  onChanged,
+}: {
+  dashboard: Dashboard;
+  isFirst: boolean;
+  isLast: boolean;
+  onChanged: () => Promise<void>;
+}) {
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -87,6 +97,11 @@ function DashboardCard({ dashboard, onChanged }: { dashboard: Dashboard; onChang
 
   async function handleResizeCard(cardSize: DashboardTileSize) {
     await apiClient.put(`/dashboards/${dashboard.id}`, { name: dashboard.name, viewIds: dashboard.viewIds, cardSize });
+    await onChanged();
+  }
+
+  async function handleMove(direction: 'up' | 'down') {
+    await apiClient.post(`/dashboards/${dashboard.id}/reorder`, { direction });
     await onChanged();
   }
 
@@ -128,6 +143,18 @@ function DashboardCard({ dashboard, onChanged }: { dashboard: Dashboard; onChang
               </option>
             ))}
           </select>
+          <button type="button" className="secondary" aria-label={`Déplacer ${dashboard.name} vers le haut`} onClick={() => handleMove('up')} disabled={isFirst}>
+            ▲
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            aria-label={`Déplacer ${dashboard.name} vers le bas`}
+            onClick={() => handleMove('down')}
+            disabled={isLast}
+          >
+            ▼
+          </button>
           <button type="button" className="secondary" onClick={() => setEditing(true)}>
             Modifier
           </button>
@@ -273,8 +300,14 @@ export function DashboardsPage() {
         <p>Aucun tableau de bord pour le moment.</p>
       ) : (
         <div className="dashboard-list-grid">
-          {myDashboards.map((dashboard) => (
-            <DashboardCard key={dashboard.id} dashboard={dashboard} onChanged={refresh} />
+          {myDashboards.map((dashboard, index) => (
+            <DashboardCard
+              key={dashboard.id}
+              dashboard={dashboard}
+              isFirst={index === 0}
+              isLast={index === myDashboards.length - 1}
+              onChanged={refresh}
+            />
           ))}
         </div>
       )}

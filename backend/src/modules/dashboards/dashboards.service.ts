@@ -16,6 +16,8 @@ export interface Dashboard {
   layout: DashboardLayout;
   /** This dashboard's own width on the /dashboards list page (1/2/3 of a fixed 3-column grid) — distinct from `layout`, which sizes each view tile inside the dashboard's own detail page. */
   cardSize: DashboardTileSize;
+  /** Position among this owner's dashboards on the list page, lower = earlier. */
+  sortOrder: number;
   visibility: ViewVisibility;
   sharedWithGroupId: string | null;
   createdAt: Date;
@@ -28,6 +30,7 @@ interface DashboardRow {
   view_ids: string[];
   layout: DashboardLayout;
   card_size: DashboardTileSize;
+  sort_order: number;
   visibility: ViewVisibility;
   shared_with_group_id: string | null;
   created_at: Date;
@@ -41,6 +44,7 @@ function toDomain(row: DashboardRow): Dashboard {
     viewIds: row.view_ids,
     layout: row.layout,
     cardSize: row.card_size,
+    sortOrder: row.sort_order,
     visibility: row.visibility,
     sharedWithGroupId: row.shared_with_group_id,
     createdAt: row.created_at,
@@ -58,6 +62,10 @@ export class DashboardsService {
       if (missing.length > 0) throw new BadRequestException(`Unknown view id(s): ${missing.join(', ')}`);
     }
 
+    // New dashboard always lands last in this owner's own order — never inserted in the middle.
+    const { max } = (await this.knex('dashboards').where({ owner_id: ownerId }).max('sort_order as max').first()) ?? { max: null };
+    const nextSortOrder = max === null ? 0 : Number(max) + 1;
+
     const [row]: DashboardRow[] = await this.knex('dashboards')
       .insert({
         owner_id: ownerId,
@@ -65,6 +73,7 @@ export class DashboardsService {
         view_ids: JSON.stringify(viewIds),
         layout: JSON.stringify(layout ?? {}),
         card_size: cardSize ?? 'medium',
+        sort_order: nextSortOrder,
         visibility: 'private',
         shared_with_group_id: null,
       })
@@ -111,8 +120,34 @@ export class DashboardsService {
   }
 
   async listMine(ownerId: string): Promise<Dashboard[]> {
-    const rows: DashboardRow[] = await this.knex('dashboards').where({ owner_id: ownerId }).orderBy('created_at', 'desc');
+    const rows: DashboardRow[] = await this.knex('dashboards').where({ owner_id: ownerId }).orderBy('sort_order', 'asc');
     return rows.map(toDomain);
+  }
+
+  /**
+   * Swaps this dashboard's position with its immediate neighbor in the requested direction —
+   * the same "move one step" interaction as a dashboard's own tile reordering, just applied to
+   * dashboards themselves instead of the views inside one. A no-op at either end of the list.
+   */
+  async reorder(dashboardId: string, ownerId: string, direction: 'up' | 'down'): Promise<Dashboard[]> {
+    const existing: DashboardRow | undefined = await this.knex('dashboards').where({ id: dashboardId }).first();
+    if (!existing) throw new NotFoundException(`Dashboard ${dashboardId} not found`);
+    if (existing.owner_id !== ownerId) throw new ForbiddenException("Vous n'êtes pas propriétaire de ce tableau de bord");
+
+    const neighbor: DashboardRow | undefined = await this.knex('dashboards')
+      .where({ owner_id: ownerId })
+      .andWhere('sort_order', direction === 'up' ? '<' : '>', existing.sort_order)
+      .orderBy('sort_order', direction === 'up' ? 'desc' : 'asc')
+      .first();
+
+    if (neighbor) {
+      await this.knex.transaction(async (trx) => {
+        await trx('dashboards').where({ id: existing.id }).update({ sort_order: neighbor.sort_order });
+        await trx('dashboards').where({ id: neighbor.id }).update({ sort_order: existing.sort_order });
+      });
+    }
+
+    return this.listMine(ownerId);
   }
 
   async listTeamWorkspace(groupId: string): Promise<Dashboard[]> {

@@ -195,6 +195,8 @@ export interface Dashboard {
   layout: DashboardLayout;
   /** This dashboard's own width on the /dashboards list page (1/2/3 of a fixed 3-column grid) — distinct from `layout`, which sizes each view tile inside the dashboard's own detail page. */
   cardSize: DashboardTileSize;
+  /** Position among this owner's dashboards on the list page, lower = earlier. */
+  sortOrder: number;
   visibility: ViewVisibility;
   sharedWithGroupId: string | null;
   createdAt: string;
