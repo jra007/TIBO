@@ -135,4 +135,13 @@ export class DashboardsService {
       .returning('*');
     return toDomain(row);
   }
+
+  /** Deletes the dashboard itself only — the views it includes are untouched, exactly like removing a view from the dashboard's selection already does. */
+  async delete(dashboardId: string, ownerId: string): Promise<void> {
+    const existing: DashboardRow | undefined = await this.knex('dashboards').where({ id: dashboardId }).first();
+    if (!existing) throw new NotFoundException(`Dashboard ${dashboardId} not found`);
+    if (existing.owner_id !== ownerId) throw new ForbiddenException("Vous n'êtes pas propriétaire de ce tableau de bord");
+
+    await this.knex('dashboards').where({ id: dashboardId }).delete();
+  }
 }

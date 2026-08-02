@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Req } from '@nestjs/common';
 import type { AuthenticatedRequest } from '../auth/authenticated-request';
 import { RequirePermission } from '../rbac/decorators/require-permission.decorator';
 import type { DashboardLayout } from './dashboards.service';
@@ -48,5 +48,11 @@ export class DashboardsController {
   @RequirePermission('view:share')
   unshare(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     return this.dashboardsService.unshare(id, req.user.id);
+  }
+
+  @Delete(':id')
+  @RequirePermission('view:create')
+  delete(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.dashboardsService.delete(id, req.user.id);
   }
 }

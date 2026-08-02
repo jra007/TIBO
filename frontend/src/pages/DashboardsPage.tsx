@@ -2,8 +2,28 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import type { Dashboard, Group, SavedView } from '../api/types';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { EditDashboardForm } from '../components/EditDashboardForm';
 
-function DashboardCard({ dashboard }: { dashboard: Dashboard }) {
+function DashboardCard({ dashboard, onChanged }: { dashboard: Dashboard; onChanged: () => Promise<void> }) {
+  const [editing, setEditing] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleDelete() {
+    setConfirmingDelete(false);
+    setDeleting(true);
+    setError(null);
+    try {
+      await apiClient.delete(`/dashboards/${dashboard.id}`);
+      await onChanged();
+    } catch {
+      setError('Échec de la suppression.');
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="dashboard-list-card">
       <div className="dashboard-list-card-header">
@@ -13,6 +33,42 @@ function DashboardCard({ dashboard }: { dashboard: Dashboard }) {
       <p className="dashboard-list-card-meta">
         {dashboard.viewIds.length} vue{dashboard.viewIds.length > 1 ? 's' : ''} · Créé le {new Date(dashboard.createdAt).toLocaleDateString('fr-FR')}
       </p>
+
+      {error && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
+
+      {editing ? (
+        <EditDashboardForm
+          dashboard={dashboard}
+          onCancel={() => setEditing(false)}
+          onSaved={async () => {
+            setEditing(false);
+            await onChanged();
+          }}
+        />
+      ) : (
+        <div className="page-actions">
+          <button type="button" className="secondary" onClick={() => setEditing(true)}>
+            Modifier
+          </button>
+          <button type="button" className="danger" onClick={() => setConfirmingDelete(true)} disabled={deleting}>
+            {deleting ? 'Suppression…' : 'Supprimer'}
+          </button>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={confirmingDelete}
+        title="Supprimer ce tableau de bord"
+        message={`Supprimer « ${dashboard.name} » ? Les vues qu'il contient ne sont pas supprimées, uniquement ce tableau de bord.`}
+        confirmLabel="Supprimer"
+        tone="danger"
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmingDelete(false)}
+      />
     </div>
   );
 }
@@ -124,7 +180,7 @@ export function DashboardsPage() {
       ) : (
         <div className="dashboard-list-grid">
           {myDashboards.map((dashboard) => (
-            <DashboardCard key={dashboard.id} dashboard={dashboard} />
+            <DashboardCard key={dashboard.id} dashboard={dashboard} onChanged={refresh} />
           ))}
         </div>
       )}
