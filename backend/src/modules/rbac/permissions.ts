@@ -14,6 +14,7 @@ export const PERMISSIONS = [
   'field:calculated:create',
   'field:calculated:edit',
   'field:calculated:share',
+  'settings:report:edit',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

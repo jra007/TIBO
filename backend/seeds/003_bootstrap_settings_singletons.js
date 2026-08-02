@@ -13,4 +13,9 @@ exports.seed = async function seed(knex) {
   if (!appearanceRow) {
     await knex('appearance_settings').insert({ id: 'singleton' });
   }
+
+  const reportRow = await knex('report_settings').where({ id: 'singleton' }).first();
+  if (!reportRow) {
+    await knex('report_settings').insert({ id: 'singleton' });
+  }
 };

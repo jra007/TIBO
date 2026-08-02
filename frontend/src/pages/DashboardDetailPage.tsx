@@ -95,6 +95,8 @@ export function DashboardDetailPage() {
   const [presentations, setPresentations] = useState<Record<string, ChartType>>({});
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   async function load() {
     if (!id || !selectedDate) return;
@@ -134,6 +136,21 @@ export function DashboardDetailPage() {
     setPresentations((prev) => ({ ...prev, [viewId]: chartType }));
   }
 
+  async function handleExport(format: 'excel' | 'pdf') {
+    if (!id || !dashboard) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      const dateSuffix = selectedDate ? `?date=${encodeURIComponent(selectedDate)}` : '';
+      const extension = format === 'excel' ? 'xlsx' : 'pdf';
+      await apiClient.download(`/exports/${format}/dashboard/${id}${dateSuffix}`, `${dashboard.name}.${extension}`);
+    } catch {
+      setExportError("Échec de l'export.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   if (error) {
     return (
       <p role="alert" className="error">
@@ -149,12 +166,25 @@ export function DashboardDetailPage() {
       <Link to="/dashboards">← Tableaux de bord</Link>
       <div className="page-header">
         <h1>{dashboard.name}</h1>
-        {dashboard.ownerId === session?.user.id && !editing && (
-          <button type="button" onClick={() => setEditing(true)}>
-            Modifier
+        <div className="page-actions">
+          {dashboard.ownerId === session?.user.id && !editing && (
+            <button type="button" onClick={() => setEditing(true)}>
+              Modifier
+            </button>
+          )}
+          <button type="button" className="secondary" onClick={() => handleExport('excel')} disabled={exporting || tiles.length === 0}>
+            Exporter en Excel
           </button>
-        )}
+          <button type="button" className="secondary" onClick={() => handleExport('pdf')} disabled={exporting || tiles.length === 0}>
+            Exporter en PDF
+          </button>
+        </div>
       </div>
+      {exportError && (
+        <p role="alert" className="error">
+          {exportError}
+        </p>
+      )}
 
       {editing && (
         <EditDashboardForm

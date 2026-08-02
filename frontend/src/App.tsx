@@ -13,6 +13,7 @@ import { ViewBuilderPage } from './pages/view-builder/ViewBuilderPage';
 import { AdminLayout } from './pages/admin/AdminLayout';
 import { AppearanceSettingsPage } from './pages/admin/AppearanceSettingsPage';
 import { DataResetPage } from './pages/admin/DataResetPage';
+import { ReportSettingsPage } from './pages/admin/ReportSettingsPage';
 import { IngestionJournalPage } from './pages/admin/IngestionJournalPage';
 import { RelationsReviewPage } from './pages/admin/RelationsReviewPage';
 import { RetentionSettingsPage } from './pages/admin/RetentionSettingsPage';
@@ -78,6 +79,14 @@ function App() {
                 element={
                   <RequirePermissionRoute permission="settings:appearance:edit">
                     <AppearanceSettingsPage />
+                  </RequirePermissionRoute>
+                }
+              />
+              <Route
+                path="reports"
+                element={
+                  <RequirePermissionRoute permission="settings:report:edit">
+                    <ReportSettingsPage />
                   </RequirePermissionRoute>
                 }
               />

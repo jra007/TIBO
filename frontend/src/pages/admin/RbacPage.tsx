@@ -18,6 +18,7 @@ const PERMISSION_LABELS: Record<Permission, string> = {
   'field:calculated:create': 'Créer un champ calculé',
   'field:calculated:edit': 'Modifier un champ calculé',
   'field:calculated:share': 'Partager un champ calculé',
+  'settings:report:edit': "Personnaliser l'en-tête des rapports PDF",
 };
 
 export function RbacPage() {

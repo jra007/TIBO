@@ -14,6 +14,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { PermissionsGuard } from './modules/rbac/guards/permissions.guard';
 import { RbacModule } from './modules/rbac/rbac.module';
 import { RelationsModule } from './modules/relations/relations.module';
+import { ReportsModule } from './modules/reports/reports.module';
 import { ViewsModule } from './modules/views/views.module';
 
 @Module({
@@ -27,8 +28,9 @@ import { ViewsModule } from './modules/views/views.module';
     RelationsModule,
     ViewsModule,
     DashboardsModule,
-    ExportsModule,
     AdminModule,
+    ReportsModule,
+    ExportsModule,
   ],
   controllers: [AppController],
   providers: [

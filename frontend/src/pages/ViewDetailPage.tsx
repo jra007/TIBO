@@ -34,6 +34,8 @@ export function ViewDetailPage() {
   const [headerLabels, setHeaderLabels] = useState<Record<string, string>>({});
   const [chartType, setChartType] = useState<ChartType | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id || !selectedDate) return;
@@ -54,6 +56,21 @@ export function ViewDetailPage() {
     setChartType(next);
   }
 
+  async function handleExport(format: 'excel' | 'pdf') {
+    if (!id || !view) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      const dateSuffix = selectedDate ? `?date=${encodeURIComponent(selectedDate)}` : '';
+      const extension = format === 'excel' ? 'xlsx' : 'pdf';
+      await apiClient.download(`/exports/${format}/${id}${dateSuffix}`, `${view.name}.${extension}`);
+    } catch {
+      setExportError("Échec de l'export.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   if (error) {
     return (
       <p role="alert" className="error">
@@ -69,12 +86,25 @@ export function ViewDetailPage() {
       <Link to="/views">← Mes vues</Link>
       <div className="page-header">
         <h1>{view.name}</h1>
-        {view.ownerId === session?.user.id && (
-          <Link to={`/views/${view.id}/edit`} className="button">
-            Modifier
-          </Link>
-        )}
+        <div className="page-actions">
+          {view.ownerId === session?.user.id && (
+            <Link to={`/views/${view.id}/edit`} className="button">
+              Modifier
+            </Link>
+          )}
+          <button type="button" className="secondary" onClick={() => handleExport('excel')} disabled={exporting}>
+            Exporter en Excel
+          </button>
+          <button type="button" className="secondary" onClick={() => handleExport('pdf')} disabled={exporting}>
+            Exporter en PDF
+          </button>
+        </div>
       </div>
+      {exportError && (
+        <p role="alert" className="error">
+          {exportError}
+        </p>
+      )}
       {view.relationStatus !== 'validated' && (
         <output style={{ display: 'block', marginBottom: 12 }}>
           <StatusBadge tone={RELATION_STATUS_TONES[view.relationStatus]}>{RELATION_STATUS_LABELS[view.relationStatus]}</StatusBadge>

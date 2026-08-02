@@ -15,6 +15,10 @@ const ALL_PERMISSIONS = [
   'settings:reset:execute',
   'ingestion:manage',
   'settings:appearance:edit',
+  'field:calculated:create',
+  'field:calculated:edit',
+  'field:calculated:share',
+  'settings:report:edit',
 ];
 
 const ADMIN_USERNAME = 'admin';

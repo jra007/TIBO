@@ -221,6 +221,7 @@ export const PERMISSIONS = [
   'field:calculated:create',
   'field:calculated:edit',
   'field:calculated:share',
+  'settings:report:edit',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -301,6 +302,24 @@ export interface UpdateAppearanceSettingsInput {
   title?: string | null;
   primaryColor?: string | null;
   backgroundColor?: string | null;
+}
+
+/** Customizes the PDF export's page header/footer — see the "Rapport" backend module. */
+export interface ReportSettings {
+  headerTitle: string | null;
+  headerSubtitle: string | null;
+  showLogo: boolean;
+  showPageNumbers: boolean;
+  showExportDate: boolean;
+}
+
+/** Any field omitted = unchanged; explicit null (for the two text fields) = reset to default. */
+export interface UpdateReportSettingsInput {
+  headerTitle?: string | null;
+  headerSubtitle?: string | null;
+  showLogo?: boolean;
+  showPageNumbers?: boolean;
+  showExportDate?: boolean;
 }
 
 export interface UploadedFileMeta {
