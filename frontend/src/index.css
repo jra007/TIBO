@@ -392,6 +392,16 @@ label.button.secondary:hover {
   line-height: 1.1;
 }
 
+/* Matches whatever Petit/Moyen/Grand was chosen for that tile on the dashboard's own page —
+   the base rule above is the 'medium' size, kept as the default for any tile with no entry. */
+.dashboard-list-card-kpi-small .dashboard-list-card-kpi-value {
+  font-size: 15px;
+}
+
+.dashboard-list-card-kpi-large .dashboard-list-card-kpi-value {
+  font-size: 28px;
+}
+
 .dashboard-list-card-kpi-label {
   font-size: 12px;
   color: var(--ink-secondary);

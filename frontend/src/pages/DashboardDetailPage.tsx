@@ -9,6 +9,7 @@ import { ExportMenu } from '../components/ExportMenu';
 import { ShareControl } from '../components/ShareControl';
 import { useDateSelection } from '../date-selection/DateSelectionContext';
 import { CHART_TYPE_OPTIONS, loadStoredChartType, storeChartType } from './chart-presentation';
+import { TILE_SIZE_LABELS, TILE_SIZE_SPANS, tileSize } from './dashboard-tile-size';
 import type { ChartType } from './view-builder/suggestChartType';
 import { ViewChart } from './view-builder/ViewChart';
 
@@ -20,13 +21,6 @@ interface DashboardTileData {
 
 function presentationStorageKey(dashboardId: string, viewId: string): string {
   return `tibo:dashboard-presentation:${dashboardId}:${viewId}`;
-}
-
-const TILE_SIZE_SPANS: Record<DashboardTileSize, number> = { small: 1, medium: 2, large: 3 };
-const TILE_SIZE_LABELS: Record<DashboardTileSize, string> = { small: 'Petit', medium: 'Moyen', large: 'Grand' };
-
-function tileSize(layout: DashboardLayout, viewId: string): DashboardTileSize {
-  return layout[viewId]?.size ?? 'medium';
 }
 
 export function DashboardDetailPage() {
