@@ -90,6 +90,15 @@ export type ChartType = 'bar' | 'line' | 'scatter' | 'heatmap' | 'table' | 'geo'
 export type ViewVisibility = 'private' | 'shared';
 export type ViewRelationStatus = 'validated' | 'pending' | 'to_fix';
 
+/** One pinned join's actual columns, with its own status — a multi-table view can have several. */
+export interface ViewRelationDetail {
+  sourceTable: string;
+  sourceColumn: string;
+  targetTable: string;
+  targetColumn: string;
+  status: ViewRelationStatus;
+}
+
 export type Aggregation = 'sum' | 'avg' | 'count' | 'min' | 'max';
 
 export interface FieldRef {
@@ -179,6 +188,8 @@ export interface SavedView {
   visibility: ViewVisibility;
   sharedWithGroupId: string | null;
   relationStatus: ViewRelationStatus;
+  /** The actual join column(s) behind relationStatus — empty for a single-table view. */
+  relations: ViewRelationDetail[];
   createdAt: string;
 }
 

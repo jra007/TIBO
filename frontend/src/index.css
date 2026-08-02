@@ -497,6 +497,29 @@ label.button.secondary:hover {
   margin: 0;
 }
 
+.view-relations {
+  display: block;
+  margin-bottom: 12px;
+}
+
+.view-relations-item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: var(--ink-secondary);
+}
+
+.view-relations-item code {
+  font-size: 12px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+}
+
 /* Owner-only row (size + move left/right) below a dashboard tile's header — kept separate from
    .dashboard-tile-header since it's only ever shown to the dashboard's owner, not every viewer. */
 .dashboard-tile-controls {

@@ -201,9 +201,16 @@ export function ViewDetailPage() {
           {exportError}
         </p>
       )}
-      {view.relationStatus !== 'validated' && (
-        <output style={{ display: 'block', marginBottom: 12 }}>
-          <StatusBadge tone={RELATION_STATUS_TONES[view.relationStatus]}>{RELATION_STATUS_LABELS[view.relationStatus]}</StatusBadge>
+      {view.relations.length > 0 && (
+        <output className="view-relations">
+          {view.relations.map((relation, index) => (
+            <p className="view-relations-item" key={index}>
+              Jointure : <code>{relation.sourceTable}.{relation.sourceColumn}</code> = <code>{relation.targetTable}.{relation.targetColumn}</code>
+              {relation.status !== 'validated' && (
+                <StatusBadge tone={RELATION_STATUS_TONES[relation.status]}>{RELATION_STATUS_LABELS[relation.status]}</StatusBadge>
+              )}
+            </p>
+          ))}
         </output>
       )}
       <ColumnFilterBar availableFields={filterableFields} activeFilters={activeFilters} onChange={handleFiltersChange} />

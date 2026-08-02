@@ -13,6 +13,15 @@ export type ChartType = 'bar' | 'line' | 'scatter' | 'heatmap' | 'table' | 'geo'
 export type ViewVisibility = 'private' | 'shared';
 export type ViewRelationStatus = 'validated' | 'pending' | 'to_fix';
 
+/** One pinned join's actual columns, with its own status — a multi-table view can have several (see pinRelationsForTablePairs). */
+export interface ViewRelationDetail {
+  sourceTable: string;
+  sourceColumn: string;
+  targetTable: string;
+  targetColumn: string;
+  status: ViewRelationStatus;
+}
+
 export type Aggregation = 'sum' | 'avg' | 'count' | 'min' | 'max';
 
 export interface FieldRef {
@@ -67,6 +76,8 @@ export interface SavedView {
   visibility: ViewVisibility;
   sharedWithGroupId: string | null;
   relationStatus: ViewRelationStatus;
+  /** The actual join column(s) behind relationStatus — empty for a single-table view. */
+  relations: ViewRelationDetail[];
   createdAt: Date;
 }
 
@@ -374,6 +385,7 @@ export class ViewsService {
   }
 
   private async toDomain(row: ViewRow): Promise<SavedView> {
+    const { status, relations } = await this.computeRelationInfo(row.tables_used, row.relation_ids);
     return {
       id: row.id,
       ownerId: row.owner_id,
@@ -384,7 +396,8 @@ export class ViewsService {
       quickStatFields: row.quick_stat_fields,
       visibility: row.visibility,
       sharedWithGroupId: row.shared_with_group_id,
-      relationStatus: await this.computeRelationStatus(row.tables_used, row.relation_ids),
+      relationStatus: status,
+      relations,
       createdAt: row.created_at,
     };
   }
@@ -392,28 +405,41 @@ export class ViewsService {
   /**
    * "Statut relation" is derived live from detected_relations, never stored — a view's status
    * must reflect the current state of the relations it depends on (validated / still proposed /
-   * rejected after the fact), per spec section 3.1.3.
+   * rejected after the fact), per spec section 3.1.3. Also returns each pinned relation's actual
+   * join columns (not just the collapsed worst-case status), so the view can show exactly which
+   * column(s) tie its tables together instead of only a pass/fail badge.
    */
-  private async computeRelationStatus(tablesUsed: string[], relationIds: string[]): Promise<ViewRelationStatus> {
-    if (tablesUsed.length <= 1) return 'validated';
+  private async computeRelationInfo(
+    tablesUsed: string[],
+    relationIds: string[],
+  ): Promise<{ status: ViewRelationStatus; relations: ViewRelationDetail[] }> {
+    if (tablesUsed.length <= 1) return { status: 'validated', relations: [] };
 
     const pairCount = (tablesUsed.length * (tablesUsed.length - 1)) / 2;
     // Some table pair had no candidate relation at all when the view was created — someone still
     // needs to establish one, so treat it the same as "proposed but not yet validated".
     let worst: ViewRelationStatus = relationIds.length < pairCount ? 'pending' : 'validated';
+    const relations: ViewRelationDetail[] = [];
 
     if (relationIds.length > 0) {
-      const relations = await this.knex('detected_relations').whereIn('id', relationIds);
+      const rows = await this.knex('detected_relations').whereIn('id', relationIds);
       // A pinned relation can now be gone entirely (bulk relation delete/reset) — as bad as a
       // rejection for a view that was built on it, so it needs the same "à corriger" treatment.
-      if (relations.length < relationIds.length) worst = 'to_fix';
-      for (const relation of relations) {
-        const pairStatus: ViewRelationStatus = relation.status === 'rejected' ? 'to_fix' : relation.status === 'proposed' ? 'pending' : 'validated';
+      if (rows.length < relationIds.length) worst = 'to_fix';
+      for (const row of rows) {
+        const pairStatus: ViewRelationStatus = row.status === 'rejected' ? 'to_fix' : row.status === 'proposed' ? 'pending' : 'validated';
         if (pairStatus === 'to_fix') worst = 'to_fix';
         else if (pairStatus === 'pending' && worst !== 'to_fix') worst = 'pending';
+        relations.push({
+          sourceTable: row.source_table,
+          sourceColumn: row.source_column,
+          targetTable: row.target_table,
+          targetColumn: row.target_column,
+          status: pairStatus,
+        });
       }
     }
-    return worst;
+    return { status: worst, relations };
   }
 }
 
