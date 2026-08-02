@@ -1,25 +1,16 @@
 import { useState } from 'react';
-import { OPERATOR_LABELS, defaultFilterValue, operatorsForDtype, valueInputType, type ColumnType, type FilterValue } from '../pages/view-builder/shelves';
-
-export interface FilterableField {
-  tableName: string;
-  columnName: string;
-  dtype: ColumnType;
-  label: string;
-}
-
-export interface ActiveColumnFilter extends FilterableField {
-  filter: FilterValue;
-}
+import { OPERATOR_LABELS, defaultFilterValue, operatorsForDtype, valueInputType, type FilterValue } from '../pages/view-builder/shelves';
+import type { ActiveColumnFilter, FilterableField } from './column-filters';
 
 function fieldKey(f: { tableName: string; columnName: string }): string {
   return `${f.tableName}.${f.columnName}`;
 }
 
 /**
- * Viewer-facing, session-only column filters — distinct from the view builder's "Filtres" shelf,
- * which the view's creator sets once and which is baked into the saved view. This bar lets anyone
- * consuming the view narrow it further, on the fly, without editing the view itself.
+ * Viewer-facing column filters, remembered per-browser (see loadStoredFilters/storeFilters) —
+ * distinct from the view builder's "Filtres" shelf, which the view's creator sets once and which
+ * is baked into the saved view for every viewer. This bar lets anyone consuming the view narrow
+ * it further, on their own, without editing the view itself or affecting other viewers.
  */
 export function ColumnFilterBar({
   availableFields,

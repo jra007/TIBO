@@ -3,7 +3,8 @@ import { Link, useParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { CALCULATED_FIELD_TABLE, type FilterCondition, type Group, type SavedView, type TableSchema, type ViewData } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
-import { ColumnFilterBar, type ActiveColumnFilter, type FilterableField } from '../components/ColumnFilterBar';
+import { ColumnFilterBar } from '../components/ColumnFilterBar';
+import { filterStorageKey, loadStoredFilters, storeFilters, type ActiveColumnFilter, type FilterableField } from '../components/column-filters';
 import { ExportMenu } from '../components/ExportMenu';
 import { ShareControl } from '../components/ShareControl';
 import { StatusBadge, type StatusTone } from '../components/StatusBadge';
@@ -57,7 +58,8 @@ export function ViewDetailPage() {
   const [activeFilters, setActiveFilters] = useState<ActiveColumnFilter[]>([]);
 
   useEffect(() => {
-    setActiveFilters([]);
+    if (!id) return;
+    setActiveFilters(loadStoredFilters(filterStorageKey(id)));
   }, [id]);
 
   useEffect(() => {
@@ -130,6 +132,11 @@ export function ViewDetailPage() {
     setChartType(next);
   }
 
+  function handleFiltersChange(next: ActiveColumnFilter[]) {
+    if (id) storeFilters(filterStorageKey(id), next);
+    setActiveFilters(next);
+  }
+
   async function handleExport(format: 'excel' | 'pdf') {
     if (!id || !view) return;
     setExporting(true);
@@ -199,7 +206,7 @@ export function ViewDetailPage() {
           <StatusBadge tone={RELATION_STATUS_TONES[view.relationStatus]}>{RELATION_STATUS_LABELS[view.relationStatus]}</StatusBadge>
         </output>
       )}
-      <ColumnFilterBar availableFields={filterableFields} activeFilters={activeFilters} onChange={setActiveFilters} />
+      <ColumnFilterBar availableFields={filterableFields} activeFilters={activeFilters} onChange={handleFiltersChange} />
       <div className="presentation-control">
         <label htmlFor="view-chart-type">Mode de présentation</label>
         <select id="view-chart-type" value={chartType} onChange={(e) => handleChartTypeChange(e.target.value as ChartType)}>
