@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
-import type { Group, SavedView, ViewData } from '../api/types';
+import { CALCULATED_FIELD_TABLE, type FilterCondition, type Group, type SavedView, type TableSchema, type ViewData } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
+import { ColumnFilterBar, type ActiveColumnFilter, type FilterableField } from '../components/ColumnFilterBar';
 import { ExportMenu } from '../components/ExportMenu';
 import { ShareControl } from '../components/ShareControl';
 import { StatusBadge, type StatusTone } from '../components/StatusBadge';
@@ -10,6 +11,18 @@ import { useDateSelection } from '../date-selection/DateSelectionContext';
 import { CHART_TYPE_OPTIONS, loadStoredChartType, storeChartType } from './chart-presentation';
 import type { ChartType } from './view-builder/suggestChartType';
 import { ViewChart } from './view-builder/ViewChart';
+
+function toFilterConditions(activeFilters: ActiveColumnFilter[]): FilterCondition[] {
+  return activeFilters
+    .filter((f) => f.filter.value !== '')
+    .map((f) => ({
+      tableName: f.tableName,
+      columnName: f.columnName,
+      operator: f.filter.operator,
+      value: f.filter.value,
+      value2: f.filter.value2 ?? null,
+    }));
+}
 
 const RELATION_STATUS_LABELS: Record<SavedView['relationStatus'], string> = {
   validated: 'Relation validée',
@@ -40,10 +53,19 @@ export function ViewDetailPage() {
   const [exportError, setExportError] = useState<string | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [sharing, setSharing] = useState(false);
+  const [schemaFields, setSchemaFields] = useState<TableSchema[]>([]);
+  const [activeFilters, setActiveFilters] = useState<ActiveColumnFilter[]>([]);
+
+  useEffect(() => {
+    setActiveFilters([]);
+  }, [id]);
 
   useEffect(() => {
     if (!id || !selectedDate) return;
-    const dataUrl = `/views/${id}/data?date=${encodeURIComponent(selectedDate)}`;
+    const params = new URLSearchParams({ date: selectedDate });
+    const filterConditions = toFilterConditions(activeFilters);
+    if (filterConditions.length > 0) params.set('filters', JSON.stringify(filterConditions));
+    const dataUrl = `/views/${id}/data?${params.toString()}`;
     Promise.all([apiClient.get<SavedView>(`/views/${id}`), apiClient.get<ViewData>(dataUrl)])
       .then(([viewResult, dataResult]) => {
         setView(viewResult);
@@ -52,11 +74,38 @@ export function ViewDetailPage() {
         setChartType(loadStoredChartType(presentationStorageKey(id)) ?? viewResult.chartType);
       })
       .catch(() => setError('Impossible de charger cette vue.'));
-  }, [id, selectedDate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, selectedDate, activeFilters]);
 
   useEffect(() => {
     apiClient.get<Group[]>('/groups').then(setGroups);
+    apiClient.get<TableSchema[]>('/ingestion/tables').then(setSchemaFields);
   }, []);
+
+  const filterableFields = useMemo<FilterableField[]>(() => {
+    if (!view) return [];
+    const schemaLookup = new Map<string, { dtype: TableSchema['columns'][number]['dtype']; label: string | null }>();
+    for (const table of schemaFields) {
+      for (const column of table.columns) schemaLookup.set(`${table.tableName}.${column.columnName}`, column);
+    }
+    const calculatedById = new Map(view.calculatedFields.map((f) => [f.id, f]));
+    const refs = [...view.shelves.rows, ...view.shelves.columns, ...view.shelves.color, ...view.shelves.size];
+    const seen = new Set<string>();
+    const result: FilterableField[] = [];
+    for (const ref of refs) {
+      const key = `${ref.tableName}.${ref.columnName}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (ref.tableName === CALCULATED_FIELD_TABLE) {
+        const calculatedField = calculatedById.get(ref.columnName);
+        if (calculatedField) result.push({ tableName: ref.tableName, columnName: ref.columnName, dtype: calculatedField.dtype, label: calculatedField.label });
+      } else {
+        const meta = schemaLookup.get(key);
+        result.push({ tableName: ref.tableName, columnName: ref.columnName, dtype: meta?.dtype ?? 'text', label: meta?.label ?? ref.columnName });
+      }
+    }
+    return result;
+  }, [view, schemaFields]);
 
   async function refreshView() {
     if (!id) return;
@@ -86,9 +135,13 @@ export function ViewDetailPage() {
     setExporting(true);
     setExportError(null);
     try {
-      const dateSuffix = selectedDate ? `?date=${encodeURIComponent(selectedDate)}` : '';
+      const params = new URLSearchParams();
+      if (selectedDate) params.set('date', selectedDate);
+      const filterConditions = toFilterConditions(activeFilters);
+      if (filterConditions.length > 0) params.set('filters', JSON.stringify(filterConditions));
+      const query = params.toString();
       const extension = format === 'excel' ? 'xlsx' : 'pdf';
-      await apiClient.download(`/exports/${format}/${id}${dateSuffix}`, `${view.name}.${extension}`);
+      await apiClient.download(`/exports/${format}/${id}${query ? `?${query}` : ''}`, `${view.name}.${extension}`);
     } catch {
       setExportError("Échec de l'export.");
     } finally {
@@ -146,6 +199,7 @@ export function ViewDetailPage() {
           <StatusBadge tone={RELATION_STATUS_TONES[view.relationStatus]}>{RELATION_STATUS_LABELS[view.relationStatus]}</StatusBadge>
         </output>
       )}
+      <ColumnFilterBar availableFields={filterableFields} activeFilters={activeFilters} onChange={setActiveFilters} />
       <div className="presentation-control">
         <label htmlFor="view-chart-type">Mode de présentation</label>
         <select id="view-chart-type" value={chartType} onChange={(e) => handleChartTypeChange(e.target.value as ChartType)}>

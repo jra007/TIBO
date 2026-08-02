@@ -116,6 +116,9 @@ export async function buildViewDataQuery(
   /** The global date selector's chosen day (UTC, "YYYY-MM-DD") — undefined falls back per table to
    * that table's own most recent date_ingestion. See applyImplicitDateFilter below. */
   selectedDate?: string,
+  /** Viewer-chosen filters (see parseRuntimeFilters) — narrowed below to fields already used by
+   * the view, so a viewer can only refine what's already shown, never query a new table/column. */
+  runtimeFilters: FilterCondition[] = [],
 ): Promise<{
   headers: string[];
   headerLabels: string[];
@@ -126,6 +129,11 @@ export async function buildViewDataQuery(
   if (fields.length === 0) throw new Error('Cette vue ne contient aucun champ à afficher');
 
   const calculatedFieldsById = new Map(calculatedFields.map((f) => [f.id, f]));
+
+  // A runtime filter's table is never newly joined — only fields already displayed or already
+  // filtered by the creator are eligible, so anything else is silently dropped here.
+  const knownFieldKeys = new Set([...fields, ...shelves.filters].map((f) => `${f.tableName}.${f.columnName}`));
+  const validRuntimeFilters = runtimeFilters.filter((f) => knownFieldKeys.has(`${f.tableName}.${f.columnName}`));
 
   const tables = [...new Set([...fields, ...shelves.filters].flatMap((f) => realTablesFor(f, calculatedFieldsById)))];
   const relations: RelationRow[] = relationIds.length > 0 ? await knex('detected_relations').whereIn('id', relationIds) : [];
@@ -154,13 +162,16 @@ export async function buildViewDataQuery(
   }
 
   for (const filter of shelves.filters) query = applyFilter(query, filter, resolveFieldSql(knex, filter, calculatedFieldsById));
+  for (const filter of validRuntimeFilters) query = applyFilter(query, filter, resolveFieldSql(knex, filter, calculatedFieldsById));
 
   // Per-table historization filter (addendum: TIBO_addendum_doublons_et_dates.md, point 4): a
   // table becomes append-only history the moment it's re-ingested, so without this every view
   // would silently sum every day ever imported instead of just one snapshot. A table the user has
   // *explicitly* dragged date_ingestion onto (in shelves.filters) is left alone — that's the
   // "compare several dates in one view" escape hatch, and takes precedence over the implicit one.
-  const explicitDateFilterTables = new Set(shelves.filters.filter((f) => f.columnName === 'date_ingestion').map((f) => f.tableName));
+  const explicitDateFilterTables = new Set(
+    [...shelves.filters, ...validRuntimeFilters].filter((f) => f.columnName === 'date_ingestion').map((f) => f.tableName),
+  );
   for (const table of tables) {
     if (explicitDateFilterTables.has(table)) continue;
     const hasDateIngestion = await knex.schema.hasColumn(table, 'date_ingestion');
@@ -255,6 +266,27 @@ export async function buildViewDataQuery(
     Object.fromEntries(finalHeaders.map((header, i) => [header, row[finalAliases[i]]]));
 
   return { headers: finalHeaders, headerLabels: finalHeaderLabels, query: wrapped, mapRow };
+}
+
+/**
+ * Parses the viewer-facing runtime `filters` query param (see ViewsController.getData). Unlike
+ * `shelves.filters` (set by whoever has view:create, at build time), this comes from any
+ * view:read-only viewer over the wire — so it's validated JSON, not trusted input, and
+ * buildViewDataQuery further restricts it to fields already part of the view (see
+ * knownFieldKeys below) rather than letting a viewer reference an arbitrary table/column.
+ */
+export function parseRuntimeFilters(json?: string): FilterCondition[] {
+  if (!json) return [];
+  try {
+    const parsed: unknown = JSON.parse(json);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (f): f is FilterCondition =>
+        f != null && typeof f === 'object' && typeof f.tableName === 'string' && typeof f.columnName === 'string' && typeof f.operator === 'string',
+    );
+  } catch {
+    return [];
+  }
 }
 
 function connectsToJoined(relation: RelationRow, joined: Set<string>, candidate: string): boolean {

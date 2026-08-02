@@ -300,9 +300,14 @@ export class ViewsService {
    * for the no-aggregation caveat. `selectedDate` is the app-wide date selector's current choice
    * (undefined = fall back to each table's own latest import day); it implicitly filters every
    * table's date_ingestion/is_obsolete unless the view already has an explicit date_ingestion
-   * filter of its own (see buildViewDataQuery).
+   * filter of its own (see buildViewDataQuery). `runtimeFilters` are the viewer's own, session-only
+   * column filters — narrowed to the view's existing fields in buildViewDataQuery, never persisted.
    */
-  async getData(viewId: string, selectedDate?: string): Promise<{ headers: string[]; headerLabels: string[]; rows: Record<string, unknown>[] }> {
+  async getData(
+    viewId: string,
+    selectedDate?: string,
+    runtimeFilters: FilterCondition[] = [],
+  ): Promise<{ headers: string[]; headerLabels: string[]; rows: Record<string, unknown>[] }> {
     const row: ViewRow | undefined = await this.knex('views').where({ id: viewId }).first();
     if (!row) throw new NotFoundException(`View ${viewId} not found`);
 
@@ -313,6 +318,7 @@ export class ViewsService {
       row.calculated_fields,
       row.quick_stat_fields,
       selectedDate,
+      runtimeFilters,
     );
     const rows = await query;
     return { headers, headerLabels, rows: rows.map(mapRow) };

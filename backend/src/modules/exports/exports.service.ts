@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import { KNEX_CONNECTION } from '../../database/database.constants';
 import { AuditService } from '../audit/audit.service';
 import { ReportPdfRendererService, type ReportSection } from '../reports/report-pdf-renderer.service';
+import type { FilterCondition } from '../views/views.service';
 import { buildViewDataQuery } from '../views/view-query-builder';
 
 /** Swaps each row's internal "table.column" keys for their display label, for human-facing exports. */
@@ -26,7 +27,11 @@ export class ExportsService {
   ) {}
 
   /** Loads one view's data exactly as the live app would show it — same quick-stat columns, same date-selector scoping — so an export never silently differs from what's on screen. */
-  private async loadViewSection(viewId: string, selectedDate?: string): Promise<ViewSection & { view: { name: string } }> {
+  private async loadViewSection(
+    viewId: string,
+    selectedDate?: string,
+    runtimeFilters: FilterCondition[] = [],
+  ): Promise<ViewSection & { view: { name: string } }> {
     const view = await this.knex('views').where({ id: viewId }).first();
     if (!view) throw new NotFoundException(`View ${viewId} not found`);
 
@@ -37,14 +42,15 @@ export class ExportsService {
       view.calculated_fields,
       view.quick_stat_fields,
       selectedDate,
+      runtimeFilters,
     );
     const rows = relabelRows((await query).map(mapRow), headers, headerLabels);
     return { view, name: view.name, headerLabels, rows };
   }
 
   /** Streamed directly in the response, never written to disk — same "never stored" reasoning as Excel. */
-  async exportToPdf(viewId: string, actorUserId: string, selectedDate?: string): Promise<Buffer> {
-    const { name, headerLabels, rows } = await this.loadViewSection(viewId, selectedDate);
+  async exportToPdf(viewId: string, actorUserId: string, selectedDate?: string, runtimeFilters: FilterCondition[] = []): Promise<Buffer> {
+    const { name, headerLabels, rows } = await this.loadViewSection(viewId, selectedDate, runtimeFilters);
     const buffer = await this.reportPdfRenderer.renderTable(name, headerLabels, rows);
     await this.auditService.record({ actorUserId, action: 'export.pdf', target: viewId });
     return buffer;
@@ -53,8 +59,8 @@ export class ExportsService {
   /** SheetJS-based export of underlying data, headers + types preserved. Streamed directly in the
    * HTTP response, never written to disk — trivially satisfies the "never stored beyond 1h" retention
    * rule for temporary exports (section 6bis) since nothing persists to begin with. */
-  async exportToExcel(viewId: string, actorUserId: string, selectedDate?: string): Promise<Buffer> {
-    const { name, headerLabels, rows } = await this.loadViewSection(viewId, selectedDate);
+  async exportToExcel(viewId: string, actorUserId: string, selectedDate?: string, runtimeFilters: FilterCondition[] = []): Promise<Buffer> {
+    const { name, headerLabels, rows } = await this.loadViewSection(viewId, selectedDate, runtimeFilters);
 
     const worksheet = XLSX.utils.json_to_sheet(rows, { header: headerLabels });
     const workbook = XLSX.utils.book_new();

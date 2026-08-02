@@ -777,6 +777,45 @@ legend {
   margin: 0;
 }
 
+.column-filter-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.column-filter-chip,
+.column-filter-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.column-filter-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-secondary);
+  white-space: nowrap;
+}
+
+.column-filter-chip select,
+.column-filter-chip input,
+.column-filter-add select {
+  width: auto;
+  max-width: 160px;
+  margin: 0;
+}
+
+.column-filter-chip button,
+.column-filter-add button {
+  margin: 0;
+}
+
 /* ---------- Buttons ---------- */
 
 button {

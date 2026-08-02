@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Put, Query, Req } from '@nestjs/com
 import type { AuthenticatedRequest } from '../auth/authenticated-request';
 import { RequirePermission } from '../rbac/decorators/require-permission.decorator';
 import type { FormulaDtype } from './formula';
+import { parseRuntimeFilters } from './view-query-builder';
 import { ViewsService, type CreateViewInput } from './views.service';
 
 @Controller('views')
@@ -46,8 +47,8 @@ export class ViewsController {
 
   @Get(':id/data')
   @RequirePermission('view:read')
-  getData(@Param('id') id: string, @Query('date') date?: string) {
-    return this.viewsService.getData(id, date);
+  getData(@Param('id') id: string, @Query('date') date?: string, @Query('filters') filters?: string) {
+    return this.viewsService.getData(id, date, parseRuntimeFilters(filters));
   }
 
   @Post(':id/share')
