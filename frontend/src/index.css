@@ -804,10 +804,18 @@ legend {
 }
 
 .column-filter-chip select,
-.column-filter-chip input,
-.column-filter-add select {
+.column-filter-chip input {
   width: auto;
   max-width: 160px;
+  margin: 0;
+}
+
+/* Unlike the operator/value controls above (short, fixed vocabulary: "égal à", "contient"...),
+   this select's own text is a column label of unpredictable length ("+ Filtrer une colonne…" or
+   whichever field is picked) — capping it as tightly as the others clipped that text unreadable. */
+.column-filter-add select {
+  width: auto;
+  max-width: 280px;
   margin: 0;
 }
 
