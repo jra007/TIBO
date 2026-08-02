@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
-import type { Dashboard, SavedView, ViewData } from '../api/types';
+import type { Dashboard, Group, SavedView, ViewData } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { ExportMenu } from '../components/ExportMenu';
+import { ShareControl } from '../components/ShareControl';
 import { useDateSelection } from '../date-selection/DateSelectionContext';
 import { CHART_TYPE_OPTIONS, loadStoredChartType, storeChartType } from './chart-presentation';
 import type { ChartType } from './view-builder/suggestChartType';
@@ -98,6 +99,24 @@ export function DashboardDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [sharing, setSharing] = useState(false);
+
+  useEffect(() => {
+    apiClient.get<Group[]>('/groups').then(setGroups);
+  }, []);
+
+  async function handleShare(groupId: string) {
+    if (!id) return;
+    await apiClient.post(`/dashboards/${id}/share`, { groupId });
+    setDashboard(await apiClient.get<Dashboard>(`/dashboards/${id}`));
+  }
+
+  async function handleUnshare() {
+    if (!id) return;
+    await apiClient.post(`/dashboards/${id}/unshare`);
+    setDashboard(await apiClient.get<Dashboard>(`/dashboards/${id}`));
+  }
 
   async function load() {
     if (!id || !selectedDate) return;
@@ -169,13 +188,29 @@ export function DashboardDetailPage() {
         <h1>{dashboard.name}</h1>
         <div className="page-actions">
           {dashboard.ownerId === session?.user.id && !editing && (
-            <button type="button" onClick={() => setEditing(true)}>
-              Modifier
-            </button>
+            <>
+              <button type="button" onClick={() => setEditing(true)}>
+                Modifier
+              </button>
+              <button type="button" className="secondary" onClick={() => setSharing((v) => !v)}>
+                {sharing ? 'Fermer' : dashboard.visibility === 'shared' ? 'Partagé' : 'Partager'}
+              </button>
+            </>
           )}
           <ExportMenu onExport={handleExport} disabled={exporting || tiles.length === 0} />
         </div>
       </div>
+      {sharing && dashboard.ownerId === session?.user.id && (
+        <ShareControl
+          idPrefix={`dashboard-${dashboard.id}`}
+          itemName={dashboard.name}
+          visibility={dashboard.visibility}
+          sharedWithGroupId={dashboard.sharedWithGroupId}
+          groups={groups}
+          onShare={handleShare}
+          onUnshare={handleUnshare}
+        />
+      )}
       {exportError && (
         <p role="alert" className="error">
           {exportError}

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
-import type { SavedView, ViewData } from '../api/types';
+import type { Group, SavedView, ViewData } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { ExportMenu } from '../components/ExportMenu';
+import { ShareControl } from '../components/ShareControl';
 import { StatusBadge, type StatusTone } from '../components/StatusBadge';
 import { useDateSelection } from '../date-selection/DateSelectionContext';
 import { CHART_TYPE_OPTIONS, loadStoredChartType, storeChartType } from './chart-presentation';
@@ -37,6 +38,8 @@ export function ViewDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [sharing, setSharing] = useState(false);
 
   useEffect(() => {
     if (!id || !selectedDate) return;
@@ -50,6 +53,27 @@ export function ViewDetailPage() {
       })
       .catch(() => setError('Impossible de charger cette vue.'));
   }, [id, selectedDate]);
+
+  useEffect(() => {
+    apiClient.get<Group[]>('/groups').then(setGroups);
+  }, []);
+
+  async function refreshView() {
+    if (!id) return;
+    setView(await apiClient.get<SavedView>(`/views/${id}`));
+  }
+
+  async function handleShare(groupId: string) {
+    if (!id) return;
+    await apiClient.post(`/views/${id}/share`, { groupId });
+    await refreshView();
+  }
+
+  async function handleUnshare() {
+    if (!id) return;
+    await apiClient.post(`/views/${id}/unshare`);
+    await refreshView();
+  }
 
   function handleChartTypeChange(next: ChartType) {
     if (!id) return;
@@ -89,13 +113,29 @@ export function ViewDetailPage() {
         <h1>{view.name}</h1>
         <div className="page-actions">
           {view.ownerId === session?.user.id && (
-            <Link to={`/views/${view.id}/edit`} className="button">
-              Modifier
-            </Link>
+            <>
+              <Link to={`/views/${view.id}/edit`} className="button">
+                Modifier
+              </Link>
+              <button type="button" className="secondary" onClick={() => setSharing((v) => !v)}>
+                {sharing ? 'Fermer' : view.visibility === 'shared' ? 'Partagée' : 'Partager'}
+              </button>
+            </>
           )}
           <ExportMenu onExport={handleExport} disabled={exporting} />
         </div>
       </div>
+      {sharing && view.ownerId === session?.user.id && (
+        <ShareControl
+          idPrefix={`view-${view.id}`}
+          itemName={view.name}
+          visibility={view.visibility}
+          sharedWithGroupId={view.sharedWithGroupId}
+          groups={groups}
+          onShare={handleShare}
+          onUnshare={handleUnshare}
+        />
+      )}
       {exportError && (
         <p role="alert" className="error">
           {exportError}

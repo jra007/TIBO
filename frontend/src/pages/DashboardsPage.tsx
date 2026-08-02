@@ -3,64 +3,16 @@ import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import type { Dashboard, Group, SavedView } from '../api/types';
 
-function DashboardCard({ dashboard, groups, onShared }: { dashboard: Dashboard; groups: Group[]; onShared: () => void }) {
-  const [shareGroupId, setShareGroupId] = useState(dashboard.sharedWithGroupId ?? '');
-  const [sharing, setSharing] = useState(false);
-
-  const sharedGroupName = groups.find((g) => g.id === dashboard.sharedWithGroupId)?.name ?? dashboard.sharedWithGroupId;
-
-  async function handleShare() {
-    if (!shareGroupId) return;
-    setSharing(true);
-    try {
-      await apiClient.post(`/dashboards/${dashboard.id}/share`, { groupId: shareGroupId });
-      onShared();
-    } finally {
-      setSharing(false);
-    }
-  }
-
-  async function handleUnshare() {
-    setSharing(true);
-    try {
-      await apiClient.post(`/dashboards/${dashboard.id}/unshare`);
-      setShareGroupId('');
-      onShared();
-    } finally {
-      setSharing(false);
-    }
-  }
-
+function DashboardCard({ dashboard }: { dashboard: Dashboard }) {
   return (
     <div className="dashboard-list-card">
       <div className="dashboard-list-card-header">
         <Link to={`/dashboards/${dashboard.id}`}>{dashboard.name}</Link>
-        <span className={`visibility-pill ${dashboard.visibility}`}>{dashboard.visibility === 'private' ? 'Privé' : `Partagé · ${sharedGroupName}`}</span>
+        <span className={`visibility-pill ${dashboard.visibility}`}>{dashboard.visibility === 'private' ? 'Privé' : 'Partagé'}</span>
       </div>
       <p className="dashboard-list-card-meta">
         {dashboard.viewIds.length} vue{dashboard.viewIds.length > 1 ? 's' : ''} · Créé le {new Date(dashboard.createdAt).toLocaleDateString('fr-FR')}
       </p>
-      <div className="page-actions">
-        <label htmlFor={`share-group-${dashboard.id}`} className="visually-hidden">
-          Partager {dashboard.name} avec un groupe
-        </label>
-        <select id={`share-group-${dashboard.id}`} value={shareGroupId} onChange={(e) => setShareGroupId(e.target.value)}>
-          <option value="">Choisir un groupe…</option>
-          {groups.map((group) => (
-            <option key={group.id} value={group.id}>
-              {group.name}
-            </option>
-          ))}
-        </select>
-        <button type="button" onClick={handleShare} disabled={sharing || !shareGroupId || shareGroupId === dashboard.sharedWithGroupId}>
-          {dashboard.visibility === 'shared' ? 'Changer' : 'Partager'}
-        </button>
-        {dashboard.visibility === 'shared' && (
-          <button type="button" className="secondary" onClick={handleUnshare} disabled={sharing}>
-            Ne plus partager
-          </button>
-        )}
-      </div>
     </div>
   );
 }
@@ -72,7 +24,7 @@ function TeamDashboardCard({ dashboard }: { dashboard: Dashboard }) {
         <Link to={`/dashboards/${dashboard.id}`}>{dashboard.name}</Link>
       </div>
       <p className="dashboard-list-card-meta">
-        {dashboard.viewIds.length} vue{dashboard.viewIds.length > 1 ? 's' : ''}
+        {dashboard.viewIds.length} vue{dashboard.viewIds.length > 1 ? 's' : ''} · Créé le {new Date(dashboard.createdAt).toLocaleDateString('fr-FR')}
       </p>
     </div>
   );
@@ -81,7 +33,6 @@ function TeamDashboardCard({ dashboard }: { dashboard: Dashboard }) {
 export function DashboardsPage() {
   const [myDashboards, setMyDashboards] = useState<Dashboard[]>([]);
   const [myViews, setMyViews] = useState<SavedView[]>([]);
-  const [groups, setGroups] = useState<Group[]>([]);
   const [teamDashboards, setTeamDashboards] = useState<Dashboard[]>([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [name, setName] = useState('');
@@ -111,7 +62,6 @@ export function DashboardsPage() {
 
   useEffect(() => {
     refresh();
-    apiClient.get<Group[]>('/groups').then(setGroups);
     loadTeamDashboards();
   }, []);
 
@@ -174,7 +124,7 @@ export function DashboardsPage() {
       ) : (
         <div className="dashboard-list-grid">
           {myDashboards.map((dashboard) => (
-            <DashboardCard key={dashboard.id} dashboard={dashboard} groups={groups} onShared={refresh} />
+            <DashboardCard key={dashboard.id} dashboard={dashboard} />
           ))}
         </div>
       )}
