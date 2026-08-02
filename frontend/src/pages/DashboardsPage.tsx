@@ -1,10 +1,69 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
-import type { Dashboard, Group, SavedView } from '../api/types';
+import type { Dashboard, Group, SavedView, ViewData } from '../api/types';
 import { AddKpiForm } from '../components/AddKpiForm';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { EditDashboardForm } from '../components/EditDashboardForm';
+import { useDateSelection } from '../date-selection/DateSelectionContext';
+
+interface DashboardKpi {
+  id: string;
+  label: string;
+  value: number;
+}
+
+/**
+ * The whole point of a KPI is seeing it at a glance — surfacing it only after opening a
+ * dashboard defeated that. Fetches just the dashboard's 'number'-typed views (skips the rest,
+ * no need to load full chart data for a card) and shows each as a compact value + label.
+ */
+function DashboardKpiPreview({ viewIds }: { viewIds: string[] }) {
+  const { selectedDate } = useDateSelection();
+  const [kpis, setKpis] = useState<DashboardKpi[]>([]);
+
+  useEffect(() => {
+    if (!selectedDate || viewIds.length === 0) {
+      setKpis([]);
+      return;
+    }
+    let cancelled = false;
+    async function load() {
+      const results = await Promise.all(
+        viewIds.map(async (viewId): Promise<DashboardKpi | null> => {
+          try {
+            const view = await apiClient.get<SavedView>(`/views/${viewId}`);
+            if (view.chartType !== 'number') return null;
+            const data = await apiClient.get<ViewData>(`/views/${viewId}/data?date=${encodeURIComponent(selectedDate as string)}`);
+            const measureKey = data.headers[0];
+            const value = data.rows.length > 0 && measureKey ? Number(data.rows[0][measureKey]) || 0 : 0;
+            return { id: viewId, label: view.name, value };
+          } catch {
+            return null;
+          }
+        }),
+      );
+      if (!cancelled) setKpis(results.filter((r): r is DashboardKpi => r != null));
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [viewIds, selectedDate]);
+
+  if (kpis.length === 0) return null;
+
+  return (
+    <div className="dashboard-list-card-kpis">
+      {kpis.map((kpi) => (
+        <div className="dashboard-list-card-kpi" key={kpi.id}>
+          <div className="dashboard-list-card-kpi-value">{new Intl.NumberFormat('fr-FR').format(kpi.value)}</div>
+          <div className="dashboard-list-card-kpi-label">{kpi.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function DashboardCard({ dashboard, onChanged }: { dashboard: Dashboard; onChanged: () => Promise<void> }) {
   const [editing, setEditing] = useState(false);
@@ -34,6 +93,7 @@ function DashboardCard({ dashboard, onChanged }: { dashboard: Dashboard; onChang
       <p className="dashboard-list-card-meta">
         {dashboard.viewIds.length} vue{dashboard.viewIds.length > 1 ? 's' : ''} · Créé le {new Date(dashboard.createdAt).toLocaleDateString('fr-FR')}
       </p>
+      <DashboardKpiPreview viewIds={dashboard.viewIds} />
 
       {error && (
         <p role="alert" className="error">
@@ -83,6 +143,7 @@ function TeamDashboardCard({ dashboard }: { dashboard: Dashboard }) {
       <p className="dashboard-list-card-meta">
         {dashboard.viewIds.length} vue{dashboard.viewIds.length > 1 ? 's' : ''} · Créé le {new Date(dashboard.createdAt).toLocaleDateString('fr-FR')}
       </p>
+      <DashboardKpiPreview viewIds={dashboard.viewIds} />
     </div>
   );
 }
