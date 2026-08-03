@@ -227,6 +227,13 @@ export interface Group {
   createdAt: string;
 }
 
+export interface Project {
+  id: string;
+  name: string;
+  description: string;
+  createdAt: string;
+}
+
 export interface Role {
   id: string;
   name: string;

@@ -18,6 +18,7 @@ import { IngestionJournalPage } from './pages/admin/IngestionJournalPage';
 import { RelationsReviewPage } from './pages/admin/RelationsReviewPage';
 import { RetentionSettingsPage } from './pages/admin/RetentionSettingsPage';
 import { GroupsPage } from './pages/admin/GroupsPage';
+import { ProjectsPage } from './pages/admin/ProjectsPage';
 import { RbacPage } from './pages/admin/RbacPage';
 import { AuthSettingsPage } from './pages/admin/AuthSettingsPage';
 import { SmtpSettingsPage } from './pages/admin/SmtpSettingsPage';
@@ -64,6 +65,7 @@ function App() {
                 }
               />
               <Route path="groups" element={<GroupsPage />} />
+              <Route path="projects" element={<ProjectsPage />} />
               <Route
                 path="rbac"
                 element={

@@ -8,6 +8,7 @@ export function AdminLayout() {
         <NavLink to="/admin/relations">Relations</NavLink>
         <NavLink to="/admin/retention">Rétention</NavLink>
         <NavLink to="/admin/groups">Groupes</NavLink>
+        <NavLink to="/admin/projects">Projets</NavLink>
         <NavLink to="/admin/rbac">Permissions</NavLink>
         <NavLink to="/admin/auth">Authentification</NavLink>
         <NavLink to="/admin/smtp">SMTP</NavLink>
