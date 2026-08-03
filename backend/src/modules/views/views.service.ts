@@ -232,7 +232,20 @@ export class ViewsService {
    * time (no view has been saved to pin relations on) — those return a clear message instead of a
    * best-effort join guess.
    */
-  async previewCalculatedField(formula: string, dtype: FormulaDtype): Promise<{ rows: unknown[]; error?: string }> {
+  /**
+   * `guards` are extra numeric sub-expressions the caller wants inspected alongside the main
+   * formula — in practice, the denominator of every Ratio/Variation% block, which the block
+   * compiler (frontend `block-formula.ts`) already wraps in `IF(denom = 0, 0, ...)` to avoid a
+   * SQL division-by-zero error. That safe fallback would otherwise silently show "0" for a
+   * missing/zero denominator with no indication anything was off — the addendum requires a
+   * missing/zero-divisor case to be flagged explicitly in the preview, not hidden behind a
+   * plausible-looking result.
+   */
+  async previewCalculatedField(
+    formula: string,
+    dtype: FormulaDtype,
+    guards: string[] = [],
+  ): Promise<{ rows: unknown[]; flags?: boolean[]; error?: string }> {
     const schemas = await this.columnProfiler.listTableSchemas();
     const availableFields = schemas.flatMap((table) => table.columns.map((column) => ({ tableName: table.tableName, columnName: column.columnName })));
 
@@ -249,10 +262,21 @@ export class ViewsService {
 
     try {
       const { sql, bindings } = compileFormula(formula, dtype, null);
-      const rows: { value: unknown }[] = await this.knex(tables[0])
-        .select(this.knex.raw(`${sql} as value`, bindings))
-        .limit(10);
-      return { rows: rows.map((row) => row.value) };
+      const guardSelects = guards.map((guardFormula, index) => {
+        const compiled = compileFormula(guardFormula, 'numeric', availableFields);
+        return { alias: `guard_${index}`, ...compiled };
+      });
+
+      const query = this.knex(tables[0]).select(this.knex.raw(`${sql} as value`, bindings));
+      for (const guard of guardSelects) {
+        query.select(this.knex.raw(`${guard.sql} as ??`, [...guard.bindings, guard.alias]));
+      }
+      const rows: Record<string, unknown>[] = await query.limit(10);
+
+      const flags = guardSelects.length
+        ? rows.map((row) => guardSelects.some((guard) => { const v = row[guard.alias]; return v === null || Number(v) === 0; }))
+        : undefined;
+      return { rows: rows.map((row) => row.value), flags };
     } catch {
       return { rows: [], error: "Erreur lors du calcul de l'aperçu — vérifiez la formule." };
     }
@@ -341,6 +365,11 @@ export class ViewsService {
     const existing: ViewRow | undefined = await this.knex('views').where({ id: viewId }).first();
     if (!existing) throw new NotFoundException(`View ${viewId} not found`);
     if (existing.owner_id !== ownerId) throw new ForbiddenException("Vous n'êtes pas propriétaire de cette vue");
+
+    // A view carrying calculated fields propagates their (possibly sensitive) business logic to
+    // the whole group, not just its raw data — gated by its own permission on top of view:share,
+    // same permission-stacking pattern as create/edit above (spec: calculated-field addendum §4.5).
+    if (existing.calculated_fields?.length > 0) await this.requirePermission(ownerId, 'field:calculated:share');
 
     const [row]: ViewRow[] = await this.knex('views')
       .where({ id: viewId })

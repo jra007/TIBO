@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { apiClient } from '../../api/client';
 import type { CalculatedField, FormulaDtype } from '../../api/types';
 import { BlockFormulaEditor } from './BlockFormulaEditor';
-import { compileBlockExpr, isBlockExprComplete, type BlockExpr } from './block-formula';
+import { collectDivisionGuards, compileBlockExpr, isBlockExprComplete, type BlockExpr } from './block-formula';
 import { displayLabel, valueInputType, type Field } from './shelves';
 import { CONDITION_FIELD_DROP_ID, COMPARISON_LABELS, compileSimpleCondition, type ComparisonOperator, type SimpleCondition } from './simple-condition';
 
@@ -59,7 +59,7 @@ export function CalculatedFieldEditor({
   const [mode, setMode] = useState<'simple' | 'blocks' | 'advanced'>(editing ? 'advanced' : 'simple');
   const [formula, setFormula] = useState(editing?.formula ?? '');
   const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<{ loading: boolean; rows: unknown[]; error: string | null } | null>(null);
+  const [preview, setPreview] = useState<{ loading: boolean; rows: unknown[]; flags?: boolean[]; error: string | null } | null>(null);
 
   const conditionField = simpleCondition.fieldId ? (availableFields.find((f) => f.id === simpleCondition.fieldId) ?? null) : null;
   const conditionValueInputType = conditionField ? valueInputType(conditionField.dtype) : 'text';
@@ -90,8 +90,13 @@ export function CalculatedFieldEditor({
     setPreview({ loading: true, rows: [], error: null });
     try {
       const compiled = compileBlockExpr(blockExpr, fieldsById);
-      const result = await apiClient.post<{ rows: unknown[]; error?: string }>('/views/preview-calculated-field', { formula: compiled, dtype });
-      setPreview({ loading: false, rows: result.rows, error: result.error ?? null });
+      const guards = collectDivisionGuards(blockExpr, fieldsById);
+      const result = await apiClient.post<{ rows: unknown[]; flags?: boolean[]; error?: string }>('/views/preview-calculated-field', {
+        formula: compiled,
+        dtype,
+        guards,
+      });
+      setPreview({ loading: false, rows: result.rows, flags: result.flags, error: result.error ?? null });
     } catch (err) {
       setPreview({ loading: false, rows: [], error: err instanceof Error ? err.message : "Échec de l'aperçu." });
     }
@@ -224,11 +229,21 @@ export function CalculatedFieldEditor({
               )}
               {!preview.error && preview.rows.length === 0 && <p>Aucune donnée disponible pour l’aperçu.</p>}
               {!preview.error && preview.rows.length > 0 && (
-                <ul>
-                  {preview.rows.map((value, index) => (
-                    <li key={index}>{String(value)}</li>
-                  ))}
-                </ul>
+                <>
+                  {preview.flags?.some(Boolean) && (
+                    <p role="alert" className="error">
+                      ⚠ Certaines lignes de l’échantillon ont un dénominateur nul ou manquant (marquées ci-dessous) — leur valeur affichée (0) ne reflète pas un vrai résultat.
+                    </p>
+                  )}
+                  <ul>
+                    {preview.rows.map((value, index) => (
+                      <li key={index}>
+                        {String(value)}
+                        {preview.flags?.[index] && <span aria-label="dénominateur nul ou manquant"> ⚠</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </>
               )}
             </div>
           )}

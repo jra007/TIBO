@@ -17,8 +17,8 @@ export class ViewsController {
 
   @Post('preview-calculated-field')
   @RequirePermission('view:create')
-  previewCalculatedField(@Body() body: { formula: string; dtype: FormulaDtype }) {
-    return this.viewsService.previewCalculatedField(body.formula, body.dtype);
+  previewCalculatedField(@Body() body: { formula: string; dtype: FormulaDtype; guards?: string[] }) {
+    return this.viewsService.previewCalculatedField(body.formula, body.dtype, body.guards ?? []);
   }
 
   @Get('mine')

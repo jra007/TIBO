@@ -75,6 +75,27 @@ export function blockDropIdFor(parentId: string, key: string): string {
   return `${parentId}.${key}`;
 }
 
+/**
+ * Every denominator (Ratio) / prior-period value (Variation%) in the tree, compiled to formula
+ * text — the block compiler wraps each in `IF(denom = 0, 0, ...)` so the query never errors, but
+ * that means a missing/zero denominator silently renders as a plausible "0" unless the preview
+ * checks these separately and flags it (spec: calculated-field addendum §3.3/§6).
+ */
+export function collectDivisionGuards(expr: BlockExpr, fieldsById: Record<string, Field>): string[] {
+  switch (expr.kind) {
+    case 'empty':
+    case 'field':
+    case 'constant':
+      return [];
+    case 'binary':
+      return [...collectDivisionGuards(expr.left, fieldsById), ...collectDivisionGuards(expr.right, fieldsById)];
+    case 'ratio':
+      return [compileBlockExpr(expr.denominator, fieldsById), ...collectDivisionGuards(expr.numerator, fieldsById), ...collectDivisionGuards(expr.denominator, fieldsById)];
+    case 'variation':
+      return [compileBlockExpr(expr.previous, fieldsById), ...collectDivisionGuards(expr.current, fieldsById), ...collectDivisionGuards(expr.previous, fieldsById)];
+  }
+}
+
 /** Inverse of blockDropIdFor's nesting — turns a drop target's id back into the path of keys from the root. */
 export function pathFromBlockDropId(dropId: string): string[] {
   if (dropId === BLOCK_ROOT_DROP_ID) return [];
