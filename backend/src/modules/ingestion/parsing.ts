@@ -12,6 +12,14 @@ export interface CleaningReport {
   keptRowCount: number;
   /** Rows dropped by a trailing exclusion (a memorized rule's or a fresh correction's), 0 if none applies. */
   trailingRowsExcluded: number;
+  /** Original header text that appeared more than once in the file — every occurrence after the
+   * first was renamed (e.g. second "Montant" becomes "Montant_2") to avoid silently losing a whole
+   * column's data: `record[header] = ...` in a plain object would otherwise let the last-occurring
+   * column silently overwrite every earlier one sharing its name, with no error and no trace. */
+  duplicateColumnsRenamed: string[];
+  /** Names of extra sheets in a multi-sheet Excel file that were NOT imported — only the first
+   * sheet is ever read. Always empty for CSV (single-sheet by construction). */
+  skippedSheets: string[];
 }
 
 function isCsvFile(fileName: string): boolean {
@@ -113,7 +121,11 @@ export interface CleaningCorrection {
 function buildGrid(
   buffer: Buffer,
   fileName: string,
-): { grid: unknown[][]; encoding: 'utf-8' | 'latin1' } {
+): {
+  grid: unknown[][];
+  encoding: 'utf-8' | 'latin1';
+  skippedSheets: string[];
+} {
   let workbook: XLSX.WorkBook;
   let encoding: 'utf-8' | 'latin1' = 'utf-8';
 
@@ -136,14 +148,19 @@ function buildGrid(
     workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
   }
 
-  const firstSheetName = workbook.SheetNames[0];
+  // Only the first sheet is ever read — a spreadsheet with several tabs (e.g. one per month, or a
+  // summary tab alongside the detail data) would otherwise have every sheet past the first
+  // silently ignored, with nothing in the ingestion result to say so. Surfaced via skippedSheets
+  // instead, all the way out to the CleaningReport, so it's at least visible and traceable rather
+  // than a quiet, undetectable gap in what got imported.
+  const [firstSheetName, ...skippedSheets] = workbook.SheetNames;
   const sheet = workbook.Sheets[firstSheetName];
   const grid: unknown[][] = XLSX.utils.sheet_to_json(sheet, {
     header: 1,
     defval: null,
     raw: true,
   });
-  return { grid, encoding };
+  return { grid, encoding, skippedSheets };
 }
 
 const PREVIEW_HEAD_ROWS = 25;
@@ -159,8 +176,13 @@ export interface PreviewRow {
 export function previewGrid(
   buffer: Buffer,
   fileName: string,
-): { rows: PreviewRow[]; totalRows: number; suggestedHeaderRowIndex: number } {
-  const { grid } = buildGrid(buffer, fileName);
+): {
+  rows: PreviewRow[];
+  totalRows: number;
+  suggestedHeaderRowIndex: number;
+  skippedSheets: string[];
+} {
+  const { grid, skippedSheets } = buildGrid(buffer, fileName);
   const suggestedHeaderRowIndex = detectHeaderRowIndex(grid);
   const indexed: PreviewRow[] = grid.map((cells, index) => ({ index, cells }));
   const rows =
@@ -170,7 +192,45 @@ export function previewGrid(
           ...indexed.slice(0, PREVIEW_HEAD_ROWS),
           ...indexed.slice(-PREVIEW_TAIL_ROWS),
         ];
-  return { rows, totalRows: grid.length, suggestedHeaderRowIndex };
+  return {
+    rows,
+    totalRows: grid.length,
+    suggestedHeaderRowIndex,
+    skippedSheets,
+  };
+}
+
+/**
+ * Disambiguates header text that appears more than once (e.g. two columns both literally named
+ * "Montant") by appending a numeric suffix to every occurrence after the first. Without this, the
+ * row-building step below (`record[header] = ...`) would let the last-occurring column silently
+ * overwrite every earlier column sharing its name in the resulting plain object — the earlier
+ * column's data wouldn't error, wouldn't warn, it would just be gone. Checks the suffixed candidate
+ * against every header seen so far (not just a counter) so it can't collide with a real, distinct
+ * column that already happens to be named e.g. "Montant_2".
+ */
+function dedupeHeaders(rawHeaders: string[]): {
+  headers: string[];
+  renamed: string[];
+} {
+  const seen = new Set<string>();
+  const renamed: string[] = [];
+  const headers = rawHeaders.map((header) => {
+    if (!seen.has(header)) {
+      seen.add(header);
+      return header;
+    }
+    renamed.push(header);
+    let suffix = 2;
+    let candidate = `${header}_${suffix}`;
+    while (seen.has(candidate)) {
+      suffix += 1;
+      candidate = `${header}_${suffix}`;
+    }
+    seen.add(candidate);
+    return candidate;
+  });
+  return { headers, renamed };
 }
 
 export function parseSpreadsheet(
@@ -182,7 +242,7 @@ export function parseSpreadsheet(
   headers: string[];
   report: CleaningReport;
 } {
-  const { grid, encoding } = buildGrid(buffer, fileName);
+  const { grid, encoding, skippedSheets } = buildGrid(buffer, fileName);
 
   const headerRowIndex = correction
     ? correction.headerRowIndex
@@ -197,11 +257,13 @@ export function parseSpreadsheet(
       ? nonEmptyDataRows.slice(0, -trailingRowsToExclude)
       : nonEmptyDataRows;
 
-  const headers = headerRow.map((cell, index) =>
+  const rawHeaders = headerRow.map((cell, index) =>
     cell === null || cell === undefined || cell === ''
       ? `col_${index}`
       : String(cell).trim(),
   );
+  const { headers, renamed: duplicateColumnsRenamed } =
+    dedupeHeaders(rawHeaders);
 
   // Entirely-blank columns: every data row has a null/empty cell at that index. A manually
   // excluded column (correction.excludedColumnIndexes) is dropped the same way.
@@ -234,6 +296,8 @@ export function parseSpreadsheet(
       droppedColumns: headers.filter((_, index) => droppedIndexes.has(index)),
       keptRowCount: dataRows.length,
       trailingRowsExcluded: nonEmptyDataRows.length - dataRows.length,
+      duplicateColumnsRenamed: [...new Set(duplicateColumnsRenamed)],
+      skippedSheets,
     },
   };
 }
@@ -395,8 +459,14 @@ export function normalizeValue(value: unknown, type: ColumnType): unknown {
       return typeof value === 'number'
         ? value
         : parseFlexibleNumber(String(value));
-    case 'date':
-      return value instanceof Date ? value : new Date(String(value));
+    case 'date': {
+      // A column is typed 'date' from a 200-row sample (inferColumnTypes) — a later row outside
+      // that sample can still hold something unparseable. `new Date(garbage)` doesn't throw, it
+      // returns an "Invalid Date" object that later blows up the whole batch insert (the pg driver
+      // calls toISOString() on it, which throws) instead of just leaving that one cell empty.
+      const parsed = value instanceof Date ? value : new Date(String(value));
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
     case 'boolean':
       if (typeof value === 'boolean') return value;
       return ['true', 'oui', 'yes', '1'].includes(

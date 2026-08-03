@@ -80,7 +80,11 @@ export class IngestionService {
    * Grid preview for the assisted-correction UI, before anything is committed (nettoyage
    * addendum, section 3). If a data admin already validated this exact file name before, the
    * memorized rule is reapplied automatically and no review is needed — only a never-seen file
-   * gets a grid back.
+   * gets a grid back. `skippedSheets` (a multi-sheet Excel file only ever has its first sheet
+   * read) is therefore only surfaced here for a never-seen file; a memorized-rule file skips
+   * re-parsing the grid entirely, so it only learns about skipped sheets via the ingestion
+   * journal's CleaningReport once the actual import runs (ingestFile → parseSpreadsheet always
+   * computes it, regardless of this shortcut).
    */
   async previewFile(
     fileName: string,
@@ -90,6 +94,7 @@ export class IngestionService {
     suggestedHeaderRowIndex: number;
     rows?: PreviewRow[];
     totalRows?: number;
+    skippedSheets?: string[];
   }> {
     const existingRule = await this.knex('ingestion_cleaning_rules')
       .where({ file_name: fileName })
@@ -100,15 +105,14 @@ export class IngestionService {
         suggestedHeaderRowIndex: existingRule.header_row_index,
       };
     }
-    const { rows, totalRows, suggestedHeaderRowIndex } = previewGrid(
-      buffer,
-      fileName,
-    );
+    const { rows, totalRows, suggestedHeaderRowIndex, skippedSheets } =
+      previewGrid(buffer, fileName);
     return {
       hasMemorizedRule: false,
       suggestedHeaderRowIndex,
       rows,
       totalRows,
+      skippedSheets,
     };
   }
 
@@ -130,7 +134,11 @@ export class IngestionService {
     totalRows: number;
     report: CleaningReport;
   } {
-    const { rows, headers, report } = parseSpreadsheet(buffer, fileName, correction);
+    const { rows, headers, report } = parseSpreadsheet(
+      buffer,
+      fileName,
+      correction,
+    );
     return {
       headers,
       rows: rows.slice(0, CLEANED_PREVIEW_ROW_LIMIT),

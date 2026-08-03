@@ -46,6 +46,13 @@ export function IngestionPreviewGrid({
       <h3>Vérification de « {fileName} »</h3>
       <p>Cliquez sur une ligne pour indiquer l'en-tête réel, ou marquez une ligne de fin (ex. un total) pour l'exclure avec toutes les suivantes.</p>
 
+      {preview.skippedSheets && preview.skippedSheets.length > 0 && (
+        <p role="alert" className="error">
+          Ce fichier contient {preview.skippedSheets.length + 1} onglets — seul le premier est importé. Onglet(s) ignoré(s) :{' '}
+          {preview.skippedSheets.join(', ')}.
+        </p>
+      )}
+
       <div className="table-scroll">
         <table className="preview-grid">
           <tbody>

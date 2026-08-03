@@ -6,6 +6,10 @@ export interface CleaningReport {
   droppedColumns: string[];
   keptRowCount: number;
   trailingRowsExcluded: number;
+  /** Header text that appeared more than once — the 2nd+ occurrence was renamed (e.g. "Montant_2") to avoid silently losing a column. */
+  duplicateColumnsRenamed: string[];
+  /** Extra sheet names in a multi-sheet file that were NOT imported — only the first sheet is ever read. */
+  skippedSheets: string[];
 }
 
 export type IngestionStatus = 'success' | 'error' | 'duplicate' | 'pending_review';
@@ -31,6 +35,7 @@ export interface FilePreview {
   /** Present only when hasMemorizedRule is false — a file with a memorized rule needs no review. */
   rows?: PreviewRow[];
   totalRows?: number;
+  skippedSheets?: string[];
 }
 
 /** A validated correction for a file the automatic heuristic couldn't confidently resolve. `trailingRowsToExclude` is a count (not an absolute index) so it survives the file's row count varying day to day — see the backend's CleaningCorrection for why. */
