@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../../database/database.constants';
+import { ProjectsService } from '../admin/settings/projects.service';
 import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RbacService } from '../rbac/rbac.service';
@@ -47,6 +48,14 @@ export interface JournalEntry {
 const BATCH_SIZE = 500;
 const CLEANED_PREVIEW_ROW_LIMIT = 50;
 
+/** The project choice made once for an entire upload batch (see IngestionController.upload) — only
+ * actually applied the first time a given table is created (see loadIntoTable), never re-asked on
+ * a daily re-import of the same file. */
+export interface ProjectAssignment {
+  projectId: string | null;
+  isShared: boolean;
+}
+
 function addColumn(
   table: Knex.CreateTableBuilder,
   column: { name: string; type: ColumnType },
@@ -75,6 +84,7 @@ export class IngestionService {
     private readonly auditService: AuditService,
     private readonly rbacService: RbacService,
     private readonly notificationsService: NotificationsService,
+    private readonly projectsService: ProjectsService,
   ) {}
 
   /**
@@ -164,6 +174,7 @@ export class IngestionService {
     buffer: Buffer,
     actorUserId: string,
     correction?: CleaningCorrection,
+    projectAssignment?: ProjectAssignment,
   ): Promise<IngestionResult> {
     const fileHash = createHash('sha256').update(buffer).digest('hex');
     const tableName = normalizeTableName(fileName);
@@ -263,6 +274,7 @@ export class IngestionService {
       const { rowCount, mixedCurrencyColumns } = await this.loadIntoTable(
         tableName,
         rows,
+        projectAssignment,
       );
       const result: IngestionResult = {
         fileName,
@@ -370,6 +382,7 @@ export class IngestionService {
   private async loadIntoTable(
     tableName: string,
     rows: Record<string, unknown>[],
+    projectAssignment?: ProjectAssignment,
   ): Promise<{ rowCount: number; mixedCurrencyColumns: string[] }> {
     const headers = Object.keys(rows[0]);
     const columnTypes = inferColumnTypes(rows, headers);
@@ -393,6 +406,16 @@ export class IngestionService {
         table.boolean('is_obsolete').notNullable().defaultTo(false);
         for (const column of columns) addColumn(table, column);
       });
+      // Recorded only at real table creation, never on a later re-import of the same file — a
+      // project choice made once is remembered (ProjectsService.assignTable is insert-only), the
+      // same "decide once" spirit as ingestion_cleaning_rules elsewhere in this file. Defaulting
+      // to is_shared:true (visible everywhere) when nothing was supplied preserves the pre-project
+      // behavior for any caller — API or otherwise — that doesn't pass a choice.
+      await this.projectsService.assignTable(
+        tableName,
+        projectAssignment?.projectId ?? null,
+        projectAssignment?.isShared ?? true,
+      );
     } else {
       // Additive-only schema reconciliation: a column present in this import but not yet in the
       // table gets added. A column type change or removal isn't handled — rare for a recurring

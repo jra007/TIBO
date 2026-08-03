@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../../api/client';
-import type { CleanedPreview, CleaningCorrection, FilePreview, JournalEntry, UploadResponse } from '../../api/types';
+import type { CleanedPreview, CleaningCorrection, FilePreview, JournalEntry, Project, UploadResponse } from '../../api/types';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { CleanedResultPreview } from './CleanedResultPreview';
 import { describeCleaningReport } from './cleaning-report';
@@ -68,9 +68,14 @@ export function IngestionJournalPage() {
   const [currentReview, setCurrentReview] = useState<ReviewState | null>(null);
   const [cleanedPreview, setCleanedPreview] = useState<CleanedPreviewState | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  // '' = "commun à tous les projets" — a single choice for the whole batch, held here rather
+  // than threaded through ReviewState/CleanedPreviewState since it never changes mid-upload.
+  const [projectId, setProjectId] = useState('');
 
   useEffect(() => {
     loadJournal();
+    apiClient.get<Project[]>('/projects').then(setProjects).catch(() => {});
   }, []);
 
   async function loadJournal() {
@@ -176,6 +181,7 @@ export function IngestionJournalPage() {
     const formData = new FormData();
     for (const file of allFiles) formData.append('files', file);
     formData.append('corrections', JSON.stringify(corrections));
+    if (projectId) formData.append('projectId', projectId);
     try {
       const response = await apiClient.postForm<UploadResponse>('/ingestion/upload', formData);
       setResult(response);
@@ -235,6 +241,15 @@ export function IngestionJournalPage() {
     <section>
       <h2>Journal d'ingestion</h2>
       <form onSubmit={handleSubmit}>
+        <label htmlFor="ingestion-project">Projet</label>
+        <select id="ingestion-project" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+          <option value="">Commun à tous les projets</option>
+          {projects.map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.name}
+            </option>
+          ))}
+        </select>
         <label htmlFor="ingestion-files">Fichiers xlsx / csv</label>
         <input id="ingestion-files" type="file" multiple accept=".xlsx,.csv" onChange={(e) => setFiles(e.target.files)} />
         <button type="submit" disabled={uploading || !files?.length}>

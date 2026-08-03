@@ -6,6 +6,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   Req,
   UploadedFile,
   UploadedFiles,
@@ -43,26 +44,45 @@ export class IngestionController {
    */
   @Post('preview-cleaned')
   @UseInterceptors(FileInterceptor('file'))
-  previewCleaned(@UploadedFile() file: Express.Multer.File, @Body('correction') correctionJson: string | undefined) {
-    const correction: CleaningCorrection | undefined = correctionJson ? JSON.parse(correctionJson) : undefined;
-    return this.ingestionService.previewCleanedFile(file.originalname, file.buffer, correction);
+  previewCleaned(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('correction') correctionJson: string | undefined,
+  ) {
+    const correction: CleaningCorrection | undefined = correctionJson
+      ? JSON.parse(correctionJson)
+      : undefined;
+    return this.ingestionService.previewCleanedFile(
+      file.originalname,
+      file.buffer,
+      correction,
+    );
   }
 
   /**
    * `corrections` (optional) is a JSON-encoded map of file name -> CleaningCorrection, for files
    * the user just reviewed in the preview grid — see IngestionService.ingestFile for how a
    * provided correction is memorized for future imports of the same file name.
+   *
+   * `projectId` is a single choice for the whole batch (the upload UI is "select files, then
+   * Importer" — no per-file project picker), only actually applied the first time each file's
+   * table gets created (see IngestionService.loadIntoTable). Empty/omitted means "commun à tous
+   * les projets" (is_shared:true) — there's no separate share flag, a specific project choice and
+   * the shared default are mutually exclusive in the upload UI.
    */
   @Post('upload')
   @UseInterceptors(FilesInterceptor('files'))
   async upload(
     @UploadedFiles() files: Express.Multer.File[],
     @Body('corrections') correctionsJson: string | undefined,
+    @Body('projectId') projectId: string | undefined,
     @Req() req: AuthenticatedRequest,
   ) {
     const corrections: Record<string, CleaningCorrection> = correctionsJson
       ? JSON.parse(correctionsJson)
       : {};
+    const projectAssignment = projectId
+      ? { projectId, isShared: false }
+      : { projectId: null, isShared: true };
     const imports = await Promise.all(
       files.map((file) =>
         this.ingestionService.ingestFile(
@@ -70,23 +90,34 @@ export class IngestionController {
           file.buffer,
           req.user.id,
           corrections[file.originalname],
+          projectAssignment,
         ),
       ),
     );
     const importedTables = imports
       .filter((r) => r.status === 'success')
       .map((r) => r.tableName);
+    // Scoped to this project's own tables + shared ones (or, for a "commun" upload with no
+    // project, every table — a shared file needs to be relatable to any project that might use
+    // it, so an unscoped scan is the correct behavior there too, not just a fallback). Without
+    // this, two unrelated projects with similarly-named columns would start generating noisy
+    // cross-project relation proposals the moment projects exist at all.
     const relations =
       importedTables.length > 0
-        ? await this.relationsService.detectRelations()
+        ? await this.relationsService.detectRelations(
+            await this.columnProfiler.listSourceTables(
+              projectAssignment.projectId ?? undefined,
+            ),
+          )
         : [];
     return { imports, relations };
   }
 
-  /** Table+column listing (no profiling) for the view builder's field picker. */
+  /** Table+column listing (no profiling) for the view builder's field picker. `projectId`
+   * narrows to that project's own tables + any shared table — omitted means every table. */
   @Get('tables')
-  listTables() {
-    return this.columnProfiler.listTableSchemas();
+  listTables(@Query('projectId') projectId?: string) {
+    return this.columnProfiler.listTableSchemas(projectId);
   }
 
   /** Full ingestion history (all past imports, with dates), not just the current upload's result. */
