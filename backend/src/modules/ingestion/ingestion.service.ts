@@ -183,12 +183,17 @@ export class IngestionService {
     // genuinely different file re-using the same name must not be blocked (see addendum's case 2/3).
     // Only compares against previously *successful* imports — a failed or already-rejected attempt
     // never stored any data, so there is nothing to actually be a duplicate of.
-    const priorMatch = await this.knex('ingestion_journal')
-      .where({ file_hash: fileHash, status: 'success' })
-      .orderBy('imported_at', 'desc')
-      .first();
+    const priorMatch: { table_name: string; imported_at: Date } | undefined =
+      await this.knex('ingestion_journal')
+        .where({ file_hash: fileHash, status: 'success' })
+        .orderBy('imported_at', 'desc')
+        .first();
     if (priorMatch) {
-      const message = `Ce fichier a déjà été importé le ${new Date(priorMatch.imported_at).toLocaleString('fr-FR')}.`;
+      const message = await this.describeDuplicate(
+        priorMatch.table_name,
+        priorMatch.imported_at,
+        projectAssignment,
+      );
       const result: IngestionResult = {
         fileName,
         tableName,
@@ -303,6 +308,32 @@ export class IngestionService {
       await this.writeJournalEntry(result, fileHash);
       return result;
     }
+  }
+
+  /**
+   * The plain "already imported on [date]" message left a real gap once projects existed: a user
+   * uploading into Project A had no way to tell, from the rejection alone, whether that existing
+   * data was already visible to them (a shared table, or already tagged to the same project) or
+   * genuinely belongs to a different project — the same wording covered both cases, and a user
+   * doesn't know either way without checking the field picker or asking someone. Names the
+   * resulting table explicitly so it can be looked up directly.
+   */
+  private async describeDuplicate(
+    tableName: string,
+    importedAt: Date,
+    projectAssignment?: ProjectAssignment,
+  ): Promise<string> {
+    const when = new Date(importedAt).toLocaleString('fr-FR');
+    const existing = await this.projectsService.getAssignment(tableName);
+    const requestedProjectId = projectAssignment?.projectId ?? null;
+
+    if (!existing || existing.isShared) {
+      return `Ce fichier a déjà été importé le ${when} (table « ${tableName} »), commune à tous les projets — ces données sont donc déjà disponibles ici.`;
+    }
+    if (existing.projectId === requestedProjectId && requestedProjectId) {
+      return `Ce fichier a déjà été importé le ${when} dans ce projet (table « ${tableName} ») — ces données sont déjà disponibles.`;
+    }
+    return `Ce fichier a déjà été importé le ${when} pour un autre projet (table « ${tableName} »), qui n'est pas commune à tous les projets — ces données ne sont donc pas visibles dans le projet actuellement sélectionné.`;
   }
 
   private static readonly ANOMALY_MULTIPLIER = 4;
