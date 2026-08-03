@@ -93,7 +93,14 @@ function buildGrid(
   if (isCsvFile(fileName)) {
     const decoded = decodeCsvBuffer(buffer);
     encoding = decoded.encoding;
-    workbook = XLSX.read(decoded.content, { type: 'string', cellDates: true });
+    // `raw: true` here (a `read`-level option, distinct from sheet_to_json's own `raw` below)
+    // stops SheetJS's own plaintext number/date auto-detection from running on CSV cells — left
+    // on, it silently mangled European-formatted numbers (e.g. "2.345,67" became the JS number
+    // 2.34567: it stripped the comma as if it were a stray thousands separator and read the rest
+    // as a plain float, off by ~1000x with no error). Every cell now arrives as a plain string, so
+    // isNumericLike/isDateLike/parseFlexibleNumber (below) are the single source of truth for
+    // typing a CSV column, instead of two independent and disagreeing heuristics.
+    workbook = XLSX.read(decoded.content, { type: 'string', cellDates: true, raw: true });
   } else {
     workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
   }
@@ -226,10 +233,55 @@ function isBooleanLike(value: unknown): boolean {
   return false;
 }
 
+/** Space (incl. non-breaking), straight/curly apostrophe — the thousands groupers seen in European/Swiss exports. */
+const THOUSANDS_CHARS = /[\s'’ ]/g;
+
+/**
+ * Parses a number that may use European-style separators — banking/finance exports frequently
+ * write a comma as the decimal mark and a space/apostrophe/dot as a thousands grouper (e.g.
+ * "1.234,56", "1 234,56"), or the Swiss style of apostrophe-grouped thousands with a dot decimal
+ * ("1'234.50") — none of which JS's `Number()` accepts. Falls back to plain `Number()` first, so
+ * already-unambiguous values (ISO/US style, no separators) are untouched.
+ *
+ * Deliberately conservative: only resolves a fraction of 1-2 digits, since that's what a real
+ * decimal mark looks like for money (cents) or a rate. A lone "1,234" (comma followed by exactly
+ * 3 digits, no other separator anywhere) is genuinely ambiguous between "one thousand two hundred
+ * thirty-four" and "one point two three four" — that case is deliberately left unparsed (the
+ * column falls back to text) rather than guessed at: a wrong silent guess on a financial figure is
+ * worse than a column that's visibly still text and gets caught during review.
+ */
+function parseFlexibleNumber(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (trimmed === '') return null;
+
+  const plain = Number(trimmed);
+  if (Number.isFinite(plain)) return plain;
+
+  // Comma decimal, with dot/space/apostrophe thousands groupers: "1.234,56" / "1 234,56" / "1234,56"
+  if (/^-?[\d.\s'’ ]+,\d{1,2}$/.test(trimmed)) {
+    const [intPart, fracPart] = trimmed.split(',');
+    const value = Number(`${intPart.replace(THOUSANDS_CHARS, '').replace(/\./g, '')}.${fracPart}`);
+    return Number.isFinite(value) ? value : null;
+  }
+
+  // Dot decimal, space/apostrophe thousands groupers only (Swiss style): "1'234.50" / "1 234.50"
+  if (/^-?[\d\s'’ ]+\.\d{1,2}$/.test(trimmed)) {
+    const value = Number(trimmed.replace(THOUSANDS_CHARS, ''));
+    return Number.isFinite(value) ? value : null;
+  }
+
+  // Pure thousands-grouped integer, no decimal part: "1'234" / "1 234 567"
+  if (/^-?\d{1,3}([\s'’ ]\d{3})+$/.test(trimmed)) {
+    const value = Number(trimmed.replace(THOUSANDS_CHARS, ''));
+    return Number.isFinite(value) ? value : null;
+  }
+
+  return null;
+}
+
 function isNumericLike(value: unknown): boolean {
   if (typeof value === 'number') return Number.isFinite(value);
-  if (typeof value === 'string')
-    return value.trim() !== '' && Number.isFinite(Number(value));
+  if (typeof value === 'string') return parseFlexibleNumber(value) !== null;
   return false;
 }
 
@@ -269,7 +321,10 @@ export function normalizeValue(value: unknown, type: ColumnType): unknown {
 
   switch (type) {
     case 'numeric':
-      return typeof value === 'number' ? value : Number(value);
+      // Same parser that decided this column is numeric in the first place (see isNumericLike) —
+      // a plain Number(value) here would silently produce NaN for a value it only classified as
+      // numeric via the European-format path (e.g. "1'234,56").
+      return typeof value === 'number' ? value : parseFlexibleNumber(String(value));
     case 'date':
       return value instanceof Date ? value : new Date(String(value));
     case 'boolean':
