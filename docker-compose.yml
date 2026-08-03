@@ -29,10 +29,14 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-tibo}:${POSTGRES_PASSWORD:-tibo_dev_password}@postgres:5432/${POSTGRES_DB:-tibo}
       RELATION_DETECTION_URL: http://relation-detection:8000
       # Dev-only fallbacks. JWT_SECRET must be a real generated secret before any non-local
-      # deployment; TIBO_ADMIN_PASSWORD sets the bootstrap admin's password on first run only.
+      # deployment (the backend refuses to start with this default when NODE_ENV=production);
+      # TIBO_ADMIN_PASSWORD sets the bootstrap admin's password on first run only.
       # Set both via .env — see .env.example.
       JWT_SECRET: ${JWT_SECRET:-dev-insecure-secret-change-me}
       TIBO_ADMIN_PASSWORD: ${TIBO_ADMIN_PASSWORD:-changeme123}
+      # CORS allowlist — comma-separated. Set to your real domain(s) via .env before any non-local
+      # deployment; defaults to the local dev frontend origins when unset.
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
       # Where uploaded files (appearance logo/favicon) are stored on disk — persists via the
       # ./backend bind mount above, no separate volume needed.
       UPLOAD_DIR: ${UPLOAD_DIR:-/app/uploads}

@@ -60,6 +60,12 @@ origin. Configuration testée avec NPM (Nginx Proxy Manager), transposable à to
    `docker compose up -d --build frontend`
 4. Ajouter le domaine à `server.allowedHosts` dans `frontend/vite.config.ts` — le serveur de dev
    Vite rejette par défaut les requêtes dont le `Host` n'est pas reconnu.
+5. Mettre à jour `ALLOWED_ORIGINS` dans `.env` avec le même domaine (ex.
+   `https://mondomaine.example`), puis reconstruire le backend : `docker compose up -d --build
+   backend`. Sans ça, le backend n'accepte par défaut que les origines de dev local — voir
+   `backend/src/main.ts`.
+6. Définir un vrai `JWT_SECRET` généré (pas la valeur par défaut de `.env.example`) — le backend
+   refuse de démarrer avec la valeur par défaut si `NODE_ENV=production` est positionné.
 
 **Piège rencontré en pratique** : si le `rewrite` est placé dans l'onglet "Advanced" général du
 Proxy Host plutôt que dans la Custom Location elle-même, il s'applique **avant** que Nginx choisisse
