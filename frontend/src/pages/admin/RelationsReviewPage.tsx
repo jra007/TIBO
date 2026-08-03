@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { apiClient } from '../../api/client';
 import type { DetectedRelation } from '../../api/types';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -16,11 +16,39 @@ const STATUS_TONES: Record<DetectedRelation['status'], StatusTone> = {
   rejected: 'critical',
 };
 
+const STATUS_FILTER_STORAGE_KEY = 'tibo.relationsReview.hiddenStatuses';
+
+/** Which statuses to hide, persisted per browser — an admin working through hundreds of proposed
+ * relations doesn't want validated ones (already dealt with) cluttering the table on every visit. */
+function loadHiddenStatuses(): Set<DetectedRelation['status']> {
+  try {
+    const raw = localStorage.getItem(STATUS_FILTER_STORAGE_KEY);
+    if (raw) return new Set(JSON.parse(raw));
+  } catch {
+    // ignore malformed/inaccessible storage, fall through to the default
+  }
+  return new Set(['validated']);
+}
+
 export function RelationsReviewPage() {
   const [relations, setRelations] = useState<DetectedRelation[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<'proposed' | 'all' | null>(null);
+  const [hiddenStatuses, setHiddenStatuses] = useState<Set<DetectedRelation['status']>>(loadHiddenStatuses);
+
+  function toggleStatusHidden(status: DetectedRelation['status']) {
+    setHiddenStatuses((prev) => {
+      const next = new Set(prev);
+      if (next.has(status)) next.delete(status);
+      else next.add(status);
+      localStorage.setItem(STATUS_FILTER_STORAGE_KEY, JSON.stringify([...next]));
+      return next;
+    });
+  }
+
+  const visibleRelations = useMemo(() => relations.filter((r) => !hiddenStatuses.has(r.status)), [relations, hiddenStatuses]);
+  const hiddenCount = relations.length - visibleRelations.length;
 
   async function refresh() {
     setLoading(true);
@@ -123,6 +151,17 @@ export function RelationsReviewPage() {
         </p>
       )}
 
+      <fieldset className="filter-bar">
+        <legend>Filtrer par statut</legend>
+        {(Object.keys(STATUS_LABELS) as DetectedRelation['status'][]).map((status) => (
+          <label key={status}>
+            <input type="checkbox" checked={!hiddenStatuses.has(status)} onChange={() => toggleStatusHidden(status)} />
+            {STATUS_LABELS[status]}
+          </label>
+        ))}
+        {hiddenCount > 0 && <span>({hiddenCount} masquée(s))</span>}
+      </fieldset>
+
       <table>
         <caption>Relations détectées entre les tables importées</caption>
         <thead>
@@ -136,7 +175,7 @@ export function RelationsReviewPage() {
           </tr>
         </thead>
         <tbody>
-          {relations.map((relation) => (
+          {visibleRelations.map((relation) => (
             <tr key={relation.id}>
               <td>
                 {relation.sourceTable}.{relation.sourceColumn}
@@ -159,6 +198,11 @@ export function RelationsReviewPage() {
               </td>
             </tr>
           ))}
+          {visibleRelations.length === 0 && relations.length > 0 && (
+            <tr>
+              <td colSpan={6}>Toutes les relations sont masquées par le filtre de statut ci-dessus.</td>
+            </tr>
+          )}
         </tbody>
       </table>
     </section>
