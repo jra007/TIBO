@@ -85,7 +85,21 @@ rapides en un clic — % du total, variation, cumul, rang, moyenne mobile — et
 les formules personnalisées, avec aperçu en direct signalant les divisions par zéro/valeurs
 manquantes). Une vue ou un champ calculé combinant plusieurs fichiers ne se joint qu'via une relation
 **validée** par un administrateur — une relation encore proposée ou rejetée n'est jamais utilisée
-silencieusement pour une jointure.
+silencieusement pour une jointure. La page de revue des relations permet de masquer par statut
+(validées masquées par défaut) pour rester lisible avec un grand volume de propositions.
+
+Le nettoyage à l'ingestion couvre aussi des cas spécifiques au contexte finance/banque : formats
+numériques européens et suisses (`1.234,56`, `1'234.50`) et américains (`1,234,567.89`), notation
+comptable des négatifs (parenthèses, signe suffixe façon SAP), symboles/codes de devise dans la
+cellule, dates au format `DD/MM/YYYY`, valeurs sentinelles de donnée manquante (`N/A`, `#N/A`, etc.)
+sans faire basculer toute une colonne en texte, en-têtes dupliqués (renommés au lieu d'écraser une
+colonne), et détection des onglets Excel ignorés ou des colonnes mélangeant plusieurs devises — ces
+deux derniers cas génèrent un avertissement visible plutôt qu'une perte de données silencieuse.
+
+Les fichiers importés peuvent être rattachés à un **projet**, ou marqués « communs » (visibles
+partout) — le constructeur de vues ne propose alors que les champs du projet actif via un sélecteur
+global, et la détection de relations ne compare que les tables d'un même projet (+ communes),
+évitant le bruit entre projets non liés. Écran d'administration dédié (`/admin/projects`).
 
 Reste ouvert : masquage des colonnes sensibles et durées légales de rétention confirmées (décisions
 métier/juridiques, cf. section 10 de la spécification), SSO/OIDC (non prévu à ce stade), et le mode
