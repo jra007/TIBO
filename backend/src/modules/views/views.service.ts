@@ -392,19 +392,28 @@ export class ViewsService {
   }
 
   /**
-   * Picks the single highest-confidence candidate relation for each distinct pair of tables used
-   * in the view, and pins its id. This is "the relation the view was built on" (spec section
-   * 3.1.3) — without pinning a specific row, a table pair with several proposed column-pair
-   * candidates (common, since scoring considers every column combination) has no well-defined
-   * single status to track.
+   * Picks the single highest-confidence *validated* candidate relation for each distinct pair of
+   * tables used in the view, and pins its id. This is "the relation the view was built on" (spec
+   * section 3.1.3) — without pinning a specific row, a table pair with several proposed
+   * column-pair candidates (common, since scoring considers every column combination) has no
+   * well-defined single status to track. Restricted to `status = 'validated'`: an admin has
+   * actually reviewed and confirmed it, as opposed to a still-`proposed` (unreviewed) or
+   * `rejected` candidate — a join built on anything less isn't trustworthy enough to silently
+   * combine rows from two different source files. If no validated relation exists for a pair, it's
+   * simply not pinned; the query later fails with a clear "cannot join" error rather than
+   * silently joining on an unreviewed guess. The direction-swap OR is grouped in its own `where`
+   * callback so `andWhere({ status: 'validated' })` applies to the whole pair, not just one
+   * direction — `.where(A).orWhere(B).andWhere(C)` would otherwise parse as `A OR (B AND C)`.
    */
   private async pinRelationsForTablePairs(tablesUsed: string[]): Promise<string[]> {
     const relationIds: string[] = [];
     for (let i = 0; i < tablesUsed.length; i++) {
       for (let j = i + 1; j < tablesUsed.length; j++) {
         const best = await this.knex('detected_relations')
-          .where({ source_table: tablesUsed[i], target_table: tablesUsed[j] })
-          .orWhere({ source_table: tablesUsed[j], target_table: tablesUsed[i] })
+          .where((builder) => {
+            builder.where({ source_table: tablesUsed[i], target_table: tablesUsed[j] }).orWhere({ source_table: tablesUsed[j], target_table: tablesUsed[i] });
+          })
+          .andWhere({ status: 'validated' })
           .orderBy('confidence_score', 'desc')
           .first();
         if (best) relationIds.push(best.id);
