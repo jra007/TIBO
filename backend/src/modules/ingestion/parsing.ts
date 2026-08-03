@@ -62,8 +62,24 @@ function detectHeaderRowIndex(rows: unknown[][]): number {
   return 0;
 }
 
-function trimIfString(value: unknown): unknown {
-  return typeof value === 'string' ? value.trim() : value;
+/**
+ * Common "missing value" placeholders finance/banking exports use instead of a genuinely empty
+ * cell. Deliberately a short, unambiguous list — a bare "NA" or a lone "-" are left OUT on purpose
+ * even though they're common sentinels too, because they collide with real data ("NA" is Namibia's
+ * ISO country code; a lone "-" can be a meaningful text value in its own right) — a false-positive
+ * here would silently delete a real value, which is worse than the problem being solved.
+ *
+ * The reason this matters at all: inferSingleColumnType requires every value in the type-inference
+ * sample to pass isNumericLike/isDateLike — a single one of these tokens surviving as a plain
+ * string would flip an otherwise entirely numeric/date column to text, silently, for the whole
+ * column (not just that one row).
+ */
+const MISSING_VALUE_SENTINELS = new Set(['n/a', 'n.a.', 'null', '#n/a', '#value!', '#ref!', '#div/0!', 'n/d', 's.o.', '--']);
+
+function normalizeCell(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  return MISSING_VALUE_SENTINELS.has(trimmed.toLowerCase()) ? null : trimmed;
 }
 
 /**
@@ -179,7 +195,7 @@ export function parseSpreadsheet(
     const record: Record<string, unknown> = {};
     headers.forEach((header, index) => {
       if (droppedIndexes.has(index)) return;
-      record[header] = trimIfString(row[index] ?? null);
+      record[header] = normalizeCell(row[index] ?? null);
     });
     return record;
   });
