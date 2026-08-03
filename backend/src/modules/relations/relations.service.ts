@@ -45,7 +45,8 @@ interface DetectedRelationRow {
   created_at: Date;
 }
 
-const RELATION_DETECTION_URL = process.env.RELATION_DETECTION_URL || 'http://localhost:8001';
+const RELATION_DETECTION_URL =
+  process.env.RELATION_DETECTION_URL || 'http://localhost:8001';
 
 function toDomain(row: DetectedRelationRow): DetectedRelation {
   return {
@@ -73,9 +74,21 @@ export class RelationsService {
     private readonly notificationsService: NotificationsService,
   ) {}
 
-  /** Delegates the scoring itself to the Python relation-detection service (name similarity, type, cardinality, Jaccard/containment). */
+  /**
+   * Delegates the scoring itself to the Python relation-detection service (name similarity, type,
+   * cardinality, Jaccard/containment). `tableNames` reaches here directly from a request body
+   * (RelationsController.detect's `tables` param) — always intersected against the real, current
+   * set of ingested src_* tables before anything is profiled. Without this, a caller holding only
+   * relation:validate (meant to scope "review relations between my ingested files") could name any
+   * table in the database — users, smtp_settings, audit_log — and have its columns (including
+   * sample values, e.g. password_hash) read and sent to the scoring service, entirely bypassing
+   * whatever access control exists elsewhere for that data.
+   */
   async detectRelations(tableNames?: string[]): Promise<DetectedRelation[]> {
-    const tables = tableNames?.length ? tableNames : await this.profiler.listSourceTables();
+    const validTables = await this.profiler.listSourceTables();
+    const tables = tableNames?.length
+      ? tableNames.filter((name) => validTables.includes(name))
+      : validTables;
     if (tables.length < 2) return [];
 
     const columns = await this.profiler.profileTables(tables);
@@ -84,8 +97,11 @@ export class RelationsService {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ columns }),
     });
-    if (!response.ok) throw new Error(`relation-detection service returned ${response.status}`);
-    const { candidates } = (await response.json()) as { candidates: RelationCandidateDto[] };
+    if (!response.ok)
+      throw new Error(`relation-detection service returned ${response.status}`);
+    const { candidates } = (await response.json()) as {
+      candidates: RelationCandidateDto[];
+    };
 
     for (const candidate of candidates) {
       await this.upsertCandidate(candidate);
@@ -98,7 +114,9 @@ export class RelationsService {
     return rows.map(toDomain);
   }
 
-  private async upsertCandidate(candidate: RelationCandidateDto): Promise<void> {
+  private async upsertCandidate(
+    candidate: RelationCandidateDto,
+  ): Promise<void> {
     const existing = await this.knex('detected_relations')
       .where({
         source_table: candidate.source_table,
@@ -126,7 +144,9 @@ export class RelationsService {
     };
 
     if (existing) {
-      await this.knex('detected_relations').where({ id: existing.id }).update(scoreFields);
+      await this.knex('detected_relations')
+        .where({ id: existing.id })
+        .update(scoreFields);
     } else {
       await this.knex('detected_relations').insert({
         source_table: candidate.source_table,
@@ -140,15 +160,27 @@ export class RelationsService {
   }
 
   async list(status?: RelationStatus): Promise<DetectedRelation[]> {
-    const query = this.knex('detected_relations').orderBy('confidence_score', 'desc');
-    const rows: DetectedRelationRow[] = status ? await query.where({ status }) : await query;
+    const query = this.knex('detected_relations').orderBy(
+      'confidence_score',
+      'desc',
+    );
+    const rows: DetectedRelationRow[] = status
+      ? await query.where({ status })
+      : await query;
     return rows.map(toDomain);
   }
 
   /** Clears undecided candidates only — the safe "declutter and re-detect" reset, no view depends on a proposed relation's identity. */
   async deleteProposed(actorUserId: string): Promise<{ deletedCount: number }> {
-    const deletedCount = await this.knex('detected_relations').where({ status: 'proposed' }).delete();
-    await this.auditService.record({ actorUserId, action: 'relation.bulk_delete_proposed', target: 'detected_relations', after: { deletedCount } });
+    const deletedCount = await this.knex('detected_relations')
+      .where({ status: 'proposed' })
+      .delete();
+    await this.auditService.record({
+      actorUserId,
+      action: 'relation.bulk_delete_proposed',
+      target: 'detected_relations',
+      after: { deletedCount },
+    });
     return { deletedCount };
   }
 
@@ -162,15 +194,26 @@ export class RelationsService {
    */
   async deleteAll(actorUserId: string): Promise<{ deletedCount: number }> {
     const deletedCount = await this.knex('detected_relations').delete();
-    await this.auditService.record({ actorUserId, action: 'relation.bulk_delete_all', target: 'detected_relations', after: { deletedCount } });
+    await this.auditService.record({
+      actorUserId,
+      action: 'relation.bulk_delete_all',
+      target: 'detected_relations',
+      after: { deletedCount },
+    });
     return { deletedCount };
   }
 
-  async validate(relationId: string, adminUserId: string): Promise<DetectedRelation> {
+  async validate(
+    relationId: string,
+    adminUserId: string,
+  ): Promise<DetectedRelation> {
     return this.setStatus(relationId, 'validated', adminUserId);
   }
 
-  async reject(relationId: string, adminUserId: string): Promise<DetectedRelation> {
+  async reject(
+    relationId: string,
+    adminUserId: string,
+  ): Promise<DetectedRelation> {
     const relation = await this.setStatus(relationId, 'rejected', adminUserId);
     await this.notifyAffectedViewOwners(relation);
     return relation;
@@ -181,8 +224,13 @@ export class RelationsService {
    * to "à corriger" automatically — no view row needs updating here. What still requires an
    * explicit action is telling the owner, per the spec's "notifié dans l'interface" requirement.
    */
-  private async notifyAffectedViewOwners(relation: DetectedRelation): Promise<void> {
-    const affectedViews = await this.knex('views').whereRaw('relation_ids @> ?::jsonb', [JSON.stringify([relation.id])]);
+  private async notifyAffectedViewOwners(
+    relation: DetectedRelation,
+  ): Promise<void> {
+    const affectedViews = await this.knex('views').whereRaw(
+      'relation_ids @> ?::jsonb',
+      [JSON.stringify([relation.id])],
+    );
 
     for (const view of affectedViews) {
       await this.notificationsService.notify({
@@ -193,12 +241,25 @@ export class RelationsService {
     }
   }
 
-  private async setStatus(relationId: string, status: RelationStatus, adminUserId: string): Promise<DetectedRelation> {
-    const before = await this.knex('detected_relations').where({ id: relationId }).first();
-    if (!before) throw new NotFoundException(`Relation ${relationId} not found`);
+  private async setStatus(
+    relationId: string,
+    status: RelationStatus,
+    adminUserId: string,
+  ): Promise<DetectedRelation> {
+    const before = await this.knex('detected_relations')
+      .where({ id: relationId })
+      .first();
+    if (!before)
+      throw new NotFoundException(`Relation ${relationId} not found`);
 
-    const update = { status, validated_by: adminUserId, validated_at: new Date() };
-    await this.knex('detected_relations').where({ id: relationId }).update(update);
+    const update = {
+      status,
+      validated_by: adminUserId,
+      validated_at: new Date(),
+    };
+    await this.knex('detected_relations')
+      .where({ id: relationId })
+      .update(update);
     const after = { ...before, ...update };
 
     await this.auditService.record({
