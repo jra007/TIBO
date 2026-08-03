@@ -74,7 +74,18 @@ function detectHeaderRowIndex(rows: unknown[][]): number {
  * string would flip an otherwise entirely numeric/date column to text, silently, for the whole
  * column (not just that one row).
  */
-const MISSING_VALUE_SENTINELS = new Set(['n/a', 'n.a.', 'null', '#n/a', '#value!', '#ref!', '#div/0!', 'n/d', 's.o.', '--']);
+const MISSING_VALUE_SENTINELS = new Set([
+  'n/a',
+  'n.a.',
+  'null',
+  '#n/a',
+  '#value!',
+  '#ref!',
+  '#div/0!',
+  'n/d',
+  's.o.',
+  '--',
+]);
 
 function normalizeCell(value: unknown): unknown {
   if (typeof value !== 'string') return value;
@@ -116,7 +127,11 @@ function buildGrid(
     // as a plain float, off by ~1000x with no error). Every cell now arrives as a plain string, so
     // isNumericLike/isDateLike/parseFlexibleNumber (below) are the single source of truth for
     // typing a CSV column, instead of two independent and disagreeing heuristics.
-    workbook = XLSX.read(decoded.content, { type: 'string', cellDates: true, raw: true });
+    workbook = XLSX.read(decoded.content, {
+      type: 'string',
+      cellDates: true,
+      raw: true,
+    });
   } else {
     workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
   }
@@ -162,7 +177,11 @@ export function parseSpreadsheet(
   buffer: Buffer,
   fileName: string,
   correction?: CleaningCorrection,
-): { rows: Record<string, unknown>[]; headers: string[]; report: CleaningReport } {
+): {
+  rows: Record<string, unknown>[];
+  headers: string[];
+  report: CleaningReport;
+} {
   const { grid, encoding } = buildGrid(buffer, fileName);
 
   const headerRowIndex = correction
@@ -170,8 +189,13 @@ export function parseSpreadsheet(
     : detectHeaderRowIndex(grid);
   const headerRow = grid[headerRowIndex] ?? [];
   const trailingRowsToExclude = correction?.trailingRowsToExclude ?? 0;
-  const nonEmptyDataRows = grid.slice(headerRowIndex + 1).filter((row) => nonEmptyCount(row) > 0);
-  const dataRows = trailingRowsToExclude > 0 ? nonEmptyDataRows.slice(0, -trailingRowsToExclude) : nonEmptyDataRows;
+  const nonEmptyDataRows = grid
+    .slice(headerRowIndex + 1)
+    .filter((row) => nonEmptyCount(row) > 0);
+  const dataRows =
+    trailingRowsToExclude > 0
+      ? nonEmptyDataRows.slice(0, -trailingRowsToExclude)
+      : nonEmptyDataRows;
 
   const headers = headerRow.map((cell, index) =>
     cell === null || cell === undefined || cell === ''
@@ -250,14 +274,50 @@ function isBooleanLike(value: unknown): boolean {
 }
 
 /** Space (incl. non-breaking), straight/curly apostrophe — the thousands groupers seen in European/Swiss exports. */
-const THOUSANDS_CHARS = /[\s'’ ]/g;
+const THOUSANDS_CHARS = /[\s'’]/g;
+
+/** Currency symbols/ISO codes seen attached directly to a value in finance exports, e.g. "CHF 1'234.50" or "1'234.50 CHF" — stripped before parsing, not treated as part of the number itself. */
+const CURRENCY_TOKEN =
+  /^(chf|eur|usd|gbp|[€$£])\s*|\s*(chf|eur|usd|gbp|[€$£])$/gi;
+
+/** Parses the digits/separators only — sign and currency are already stripped by parseFlexibleNumber before this runs. */
+function parseUnsignedSeparatedNumber(trimmed: string): number | null {
+  if (trimmed === '') return null;
+  const plain = Number(trimmed);
+  if (Number.isFinite(plain)) return plain;
+
+  // Comma decimal, with dot/space/apostrophe thousands groupers: "1.234,56" / "1 234,56" / "1234,56"
+  if (/^[\d.\s'’]+,\d{1,2}$/.test(trimmed)) {
+    const [intPart, fracPart] = trimmed.split(',');
+    const value = Number(
+      `${intPart.replace(THOUSANDS_CHARS, '').replace(/\./g, '')}.${fracPart}`,
+    );
+    return Number.isFinite(value) ? value : null;
+  }
+
+  // Dot decimal, space/apostrophe thousands groupers only (Swiss style): "1'234.50" / "1 234.50"
+  if (/^[\d\s'’]+\.\d{1,2}$/.test(trimmed)) {
+    const value = Number(trimmed.replace(THOUSANDS_CHARS, ''));
+    return Number.isFinite(value) ? value : null;
+  }
+
+  // Pure thousands-grouped integer, no decimal part: "1'234" / "1 234 567"
+  if (/^\d{1,3}([\s'’]\d{3})+$/.test(trimmed)) {
+    const value = Number(trimmed.replace(THOUSANDS_CHARS, ''));
+    return Number.isFinite(value) ? value : null;
+  }
+
+  return null;
+}
 
 /**
  * Parses a number that may use European-style separators — banking/finance exports frequently
  * write a comma as the decimal mark and a space/apostrophe/dot as a thousands grouper (e.g.
  * "1.234,56", "1 234,56"), or the Swiss style of apostrophe-grouped thousands with a dot decimal
- * ("1'234.50") — none of which JS's `Number()` accepts. Falls back to plain `Number()` first, so
- * already-unambiguous values (ISO/US style, no separators) are untouched.
+ * ("1'234.50") — none of which JS's `Number()` accepts. Also strips a leading/trailing currency
+ * symbol or ISO code, and recognizes accounting-style negatives: parentheses ("(1'234.50)", common
+ * on financial statements) and a trailing minus sign ("1234.50-", the SAP/mainframe export
+ * convention), in addition to a plain leading "-".
  *
  * Deliberately conservative: only resolves a fraction of 1-2 digits, since that's what a real
  * decimal mark looks like for money (cents) or a rate. A lone "1,234" (comma followed by exactly
@@ -267,32 +327,24 @@ const THOUSANDS_CHARS = /[\s'’ ]/g;
  * worse than a column that's visibly still text and gets caught during review.
  */
 function parseFlexibleNumber(raw: string): number | null {
-  const trimmed = raw.trim();
+  let trimmed = raw.trim().replace(CURRENCY_TOKEN, '').trim();
   if (trimmed === '') return null;
 
-  const plain = Number(trimmed);
-  if (Number.isFinite(plain)) return plain;
-
-  // Comma decimal, with dot/space/apostrophe thousands groupers: "1.234,56" / "1 234,56" / "1234,56"
-  if (/^-?[\d.\s'’ ]+,\d{1,2}$/.test(trimmed)) {
-    const [intPart, fracPart] = trimmed.split(',');
-    const value = Number(`${intPart.replace(THOUSANDS_CHARS, '').replace(/\./g, '')}.${fracPart}`);
-    return Number.isFinite(value) ? value : null;
+  let negative = false;
+  if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
+    negative = true;
+    trimmed = trimmed.slice(1, -1).trim();
+  } else if (trimmed.endsWith('-')) {
+    negative = true;
+    trimmed = trimmed.slice(0, -1).trim();
+  } else if (trimmed.startsWith('-')) {
+    negative = true;
+    trimmed = trimmed.slice(1).trim();
   }
 
-  // Dot decimal, space/apostrophe thousands groupers only (Swiss style): "1'234.50" / "1 234.50"
-  if (/^-?[\d\s'’ ]+\.\d{1,2}$/.test(trimmed)) {
-    const value = Number(trimmed.replace(THOUSANDS_CHARS, ''));
-    return Number.isFinite(value) ? value : null;
-  }
-
-  // Pure thousands-grouped integer, no decimal part: "1'234" / "1 234 567"
-  if (/^-?\d{1,3}([\s'’ ]\d{3})+$/.test(trimmed)) {
-    const value = Number(trimmed.replace(THOUSANDS_CHARS, ''));
-    return Number.isFinite(value) ? value : null;
-  }
-
-  return null;
+  const value = parseUnsignedSeparatedNumber(trimmed);
+  if (value === null) return null;
+  return negative ? -Math.abs(value) : value;
 }
 
 function isNumericLike(value: unknown): boolean {
@@ -340,7 +392,9 @@ export function normalizeValue(value: unknown, type: ColumnType): unknown {
       // Same parser that decided this column is numeric in the first place (see isNumericLike) —
       // a plain Number(value) here would silently produce NaN for a value it only classified as
       // numeric via the European-format path (e.g. "1'234,56").
-      return typeof value === 'number' ? value : parseFlexibleNumber(String(value));
+      return typeof value === 'number'
+        ? value
+        : parseFlexibleNumber(String(value));
     case 'date':
       return value instanceof Date ? value : new Date(String(value));
     case 'boolean':
