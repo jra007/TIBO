@@ -8,6 +8,7 @@ import {
   QUICK_STAT_NEEDS_ORDER_FIELD,
   type CalculatedField,
   type FilterCondition,
+  type Project,
   type QuickStatField,
   type QuickStatKind,
   type SavedView,
@@ -87,7 +88,8 @@ export function ViewBuilderPage() {
   const { id } = useParams<{ id: string }>();
   const isEditing = Boolean(id);
   const navigate = useNavigate();
-  const { selectedProjectId } = useProjectSelection();
+  const { selectedProjectId, setSelectedProjectId } = useProjectSelection();
+  const [projects, setProjects] = useState<Project[]>([]);
   const [schemaFields, setSchemaFields] = useState<Field[]>([]);
   const [calculatedFields, setCalculatedFields] = useState<CalculatedField[]>([]);
   const [editingCalculatedField, setEditingCalculatedField] = useState<'new' | CalculatedField | null>(null);
@@ -108,15 +110,24 @@ export function ViewBuilderPage() {
     // fieldRefToField/filterConditionToField below silently fall back to dtype:'text', label:null
     // for any shelf/filter field not found in schemaFields — a project-scoped fetch here could
     // silently mistype a field the view already uses from a *different* project, with no error to
-    // catch it. A brand-new view is scoped, so its field picker only proposes the active project's
-    // (+ shared) fields in the first place.
+    // catch it. A brand-new view is scoped, so switching the project selector (below) live-refreshes
+    // the field palette — already-placed shelf fields are unaffected, since assignToShelf copies the
+    // full Field object onto the shelf rather than re-resolving it from schemaFields later.
     const query = isEditing || !selectedProjectId ? '' : `?projectId=${selectedProjectId}`;
     apiClient
       .get<TableSchema[]>(`/ingestion/tables${query}`)
       .then((schemas) => setSchemaFields(schemasToFields(schemas)))
       .catch(() => setError("Impossible de charger les champs. Importez d'abord des fichiers."));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEditing]);
+  }, [isEditing, selectedProjectId]);
+
+  useEffect(() => {
+    apiClient
+      .get<Project[]>('/projects')
+      .then(setProjects)
+      .catch(() => {
+        // No projects created yet, or the request failed — the field picker just stays unscoped.
+      });
+  }, []);
 
   useEffect(() => {
     if (!id || schemaFields.length === 0) return;
@@ -383,6 +394,19 @@ export function ViewBuilderPage() {
         <div className="view-builder-layout">
           <aside aria-label="Champs disponibles">
             <h2>Champs</h2>
+            {!isEditing && projects.length > 0 && (
+              <label className="view-builder-project-selector">
+                Projet
+                <select value={selectedProjectId ?? ''} onChange={(e) => setSelectedProjectId(e.target.value || null)}>
+                  <option value="">Tous les projets</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label htmlFor="field-search" className="visually-hidden">
               Rechercher un champ
             </label>

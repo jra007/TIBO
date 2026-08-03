@@ -191,6 +191,23 @@ a:hover {
   padding: 4px 6px;
 }
 
+.view-builder-project-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink-secondary);
+  margin-bottom: 12px;
+}
+
+.view-builder-project-selector select {
+  width: auto;
+  max-width: none;
+  margin: 0;
+  font-size: 13px;
+  padding: 4px 6px;
+}
+
 .app-brand {
   display: flex;
   align-items: center;
