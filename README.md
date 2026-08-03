@@ -1,6 +1,9 @@
 # TIBO
 
-Plateforme BI self-service pour utilisateurs métiers. Spécification complète : [`TIBO_specification_projet.md`](./TIBO_specification_projet.md).
+Plateforme BI self-service pour utilisateurs métiers. Spécification complète : [`TIBO_specification_projet.md`](./TIBO_specification_projet.md), complétée par trois addenda :
+[nettoyage des fichiers à l'ingestion](./TIBO_addendum_nettoyage_fichiers.md),
+[doublons et sélection de date](./TIBO_addendum_doublons_et_dates.md),
+[champs calculés](./TIBO_addendum_champs_calcules.md).
 
 ## Structure du repo
 
@@ -73,5 +76,18 @@ d'administration. Authentification LDAP (bind de service + recherche + vérifica
 passe), SMTP (envoi réel via nodemailer, avec email de test) et apparence (logo, favicon, titre,
 couleur des boutons et du fond, appliqués immédiatement dans toute l'application y compris sur
 l'écran de connexion) sont réellement actifs, pas seulement des écrans de configuration.
+
+Les trois addenda sont également implémentés : nettoyage automatique et assisté des fichiers à
+l'ingestion (délimiteur/encodage, en-tête, lignes/colonnes vides, correction visuelle mémorisée par
+fichier, garde-fou anomalie) ; détection des doublons par empreinte de contenu, ingestion append-only
+avec `date_ingestion`, sélecteur de date global et filtre de date par vue ; champs calculés (calculs
+rapides en un clic — % du total, variation, cumul, rang, moyenne mobile — et éditeur par blocs pour
+les formules personnalisées, avec aperçu en direct signalant les divisions par zéro/valeurs
+manquantes). Une vue ou un champ calculé combinant plusieurs fichiers ne se joint qu'via une relation
+**validée** par un administrateur — une relation encore proposée ou rejetée n'est jamais utilisée
+silencieusement pour une jointure.
+
 Reste ouvert : masquage des colonnes sensibles et durées légales de rétention confirmées (décisions
-métier/juridiques, cf. section 10 de la spécification), SSO/OIDC (non prévu à ce stade).
+métier/juridiques, cf. section 10 de la spécification), SSO/OIDC (non prévu à ce stade), et le mode
+"Formule texte" de l'éditeur de champ calculé qui expose encore une saisie libre (dérogation
+consciente à l'addendum champs calculés, laissée en l'état sur décision explicite).
