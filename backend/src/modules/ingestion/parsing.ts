@@ -20,6 +20,11 @@ export interface CleaningReport {
   /** Names of extra sheets in a multi-sheet Excel file that were NOT imported — only the first
    * sheet is ever read. Always empty for CSV (single-sheet by construction). */
   skippedSheets: string[];
+  /** Columns where more than one currency symbol/code was seen across the sampled rows (e.g. some
+   * rows "CHF 100", others "EUR 100") — summing such a column silently mixes currencies as if they
+   * were the same unit. Populated after ingestion (column typing happens in IngestionService, not
+   * parseSpreadsheet), merged into the journal entry before it's written — see ingestFile. */
+  mixedCurrencyColumns: string[];
 }
 
 function isCsvFile(fileName: string): boolean {
@@ -298,6 +303,7 @@ export function parseSpreadsheet(
       trailingRowsExcluded: nonEmptyDataRows.length - dataRows.length,
       duplicateColumnsRenamed: [...new Set(duplicateColumnsRenamed)],
       skippedSheets,
+      mixedCurrencyColumns: [],
     },
   };
 }
@@ -328,6 +334,37 @@ function inferSingleColumnType(values: unknown[]): ColumnType {
   return 'text';
 }
 
+/**
+ * Column names (already typed 'numeric' by inferColumnTypes) where more than one currency
+ * symbol/code appears across the sampled rows — e.g. some rows "CHF 100", others "EUR 100". The
+ * numeric value itself parses fine either way (parseFlexibleNumber strips whichever currency is
+ * present), which is exactly the danger: summing the column silently treats every row as the same
+ * unit. Doesn't block the import — the numbers are still real numbers — just surfaces it so a data
+ * admin can check whether that's actually true for this file, the same "make it visible instead of
+ * guessing" approach as skippedSheets/duplicateColumnsRenamed above.
+ */
+export function detectMixedCurrencyColumns(
+  rows: Record<string, unknown>[],
+  headers: string[],
+  columnTypes: Record<string, ColumnType>,
+): string[] {
+  const sample = rows.slice(0, SAMPLE_SIZE);
+  const flagged: string[] = [];
+
+  for (const header of headers) {
+    if (columnTypes[header] !== 'numeric') continue;
+    const currencies = new Set<string>();
+    for (const row of sample) {
+      const value = row[header];
+      if (typeof value !== 'string') continue;
+      const { currency } = stripCurrencyToken(value.trim());
+      if (currency) currencies.add(currency);
+    }
+    if (currencies.size > 1) flagged.push(header);
+  }
+  return flagged;
+}
+
 function isBooleanLike(value: unknown): boolean {
   if (typeof value === 'boolean') return true;
   if (typeof value === 'string')
@@ -340,9 +377,37 @@ function isBooleanLike(value: unknown): boolean {
 /** Space (incl. non-breaking), straight/curly apostrophe — the thousands groupers seen in European/Swiss exports. */
 const THOUSANDS_CHARS = /[\s'’]/g;
 
-/** Currency symbols/ISO codes seen attached directly to a value in finance exports, e.g. "CHF 1'234.50" or "1'234.50 CHF" — stripped before parsing, not treated as part of the number itself. */
+/** Currency symbols/ISO codes seen attached directly to a value in finance exports, e.g. "CHF 1'234.50" or "1'234.50 CHF". Not `g`-flagged: used with `.exec()` below to also report which currency was found (see stripCurrencyToken), not just to strip it. */
 const CURRENCY_TOKEN =
-  /^(chf|eur|usd|gbp|[€$£])\s*|\s*(chf|eur|usd|gbp|[€$£])$/gi;
+  /^(chf|eur|usd|gbp|[€$£])\s*|\s*(chf|eur|usd|gbp|[€$£])$/i;
+
+const CURRENCY_SYMBOL_TO_CODE: Record<string, string> = {
+  '€': 'EUR',
+  $: 'USD',
+  '£': 'GBP',
+};
+
+/**
+ * Strips a leading/trailing currency symbol or ISO code if present, and reports which currency
+ * (normalized to an ISO-ish code) was found — used both to get the bare number for parsing
+ * (parseFlexibleNumber) and to detect a column silently mixing currencies across rows (see
+ * detectMixedCurrencyColumns), which parsing the number alone would otherwise lose track of.
+ */
+function stripCurrencyToken(raw: string): {
+  rest: string;
+  currency: string | null;
+} {
+  const match = CURRENCY_TOKEN.exec(raw);
+  if (!match) return { rest: raw, currency: null };
+  const token = match[1] ?? match[2];
+  const rest =
+    raw.slice(0, match.index) + raw.slice(match.index + match[0].length);
+  return {
+    rest,
+    currency:
+      CURRENCY_SYMBOL_TO_CODE[token.toLowerCase()] ?? token.toUpperCase(),
+  };
+}
 
 /** Parses the digits/separators only — sign and currency are already stripped by parseFlexibleNumber before this runs. */
 function parseUnsignedSeparatedNumber(trimmed: string): number | null {
@@ -371,6 +436,22 @@ function parseUnsignedSeparatedNumber(trimmed: string): number | null {
     return Number.isFinite(value) ? value : null;
   }
 
+  // US-style comma thousands + dot decimal: "1,234.56" / "1,234,567.89" — unambiguous regardless
+  // of how many comma-groups there are, because the trailing dot-decimal fixes which mark is which
+  // (the European convention would write the same value with the two separators swapped).
+  if (/^\d{1,3}(,\d{3})+\.\d{1,2}$/.test(trimmed)) {
+    const value = Number(trimmed.replace(/,/g, ''));
+    return Number.isFinite(value) ? value : null;
+  }
+
+  // Pure US-style comma-thousands integer, no decimal shown: "1,234,567". Requires 2+ comma-groups
+  // — a single group ("1,234") is exactly the ambiguous case documented above and stays unparsed;
+  // two or more groups can only be thousands separators in any convention, never a decimal mark.
+  if (/^\d{1,3}(,\d{3}){2,}$/.test(trimmed)) {
+    const value = Number(trimmed.replace(/,/g, ''));
+    return Number.isFinite(value) ? value : null;
+  }
+
   return null;
 }
 
@@ -391,7 +472,7 @@ function parseUnsignedSeparatedNumber(trimmed: string): number | null {
  * worse than a column that's visibly still text and gets caught during review.
  */
 function parseFlexibleNumber(raw: string): number | null {
-  let trimmed = raw.trim().replace(CURRENCY_TOKEN, '').trim();
+  let trimmed = stripCurrencyToken(raw.trim()).rest.trim();
   if (trimmed === '') return null;
 
   let negative = false;
@@ -417,13 +498,52 @@ function isNumericLike(value: unknown): boolean {
   return false;
 }
 
+const EUROPEAN_DATE = /^(\d{1,2})[./-](\d{1,2})[./-](\d{2}|\d{4})$/;
+
+/**
+ * Parses "DD/MM/YYYY" (or `.`/`-` separated, 2- or 4-digit year) — the day-first convention this
+ * platform's business context (French/Swiss finance/banking) uses by default. Deliberately a firm,
+ * documented convention rather than an attempt at smart disambiguation: unlike a wrong numeric
+ * guess (which usually looks like a parse failure), a wrong day/month swap still produces a
+ * *plausible-looking* date, so there is no safe way to detect the mistake after the fact — the
+ * platform picks day-first and stays with it, the same way the numeric parser picked a fixed UTC
+ * day boundary elsewhere in ingestion rather than guessing a business timezone.
+ *
+ * Rejects anything that isn't a real calendar date rather than letting `Date` silently roll an
+ * overflow into the next month (e.g. "31/04" has no April 31st) — a rejected string simply isn't
+ * treated as a date, consistent with parseFlexibleNumber's "leave it as text rather than guess"
+ * stance elsewhere in this file.
+ */
+function parseEuropeanDate(trimmed: string): Date | null {
+  const match = EUROPEAN_DATE.exec(trimmed);
+  if (!match) return null;
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  let year = Number(match[3]);
+  if (match[3].length === 2) year += year < 70 ? 2000 : 1900;
+  if (day < 1 || day > 31 || month < 1 || month > 12) return null;
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  )
+    return null;
+  return date;
+}
+
 function isDateLike(value: unknown): boolean {
   if (value instanceof Date) return !Number.isNaN(value.getTime());
-  if (typeof value === 'string')
-    return (
-      /^\d{4}-\d{2}-\d{2}/.test(value.trim()) &&
-      !Number.isNaN(Date.parse(value))
-    );
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (
+      /^\d{4}-\d{2}-\d{2}/.test(trimmed) &&
+      !Number.isNaN(Date.parse(trimmed))
+    )
+      return true;
+    return parseEuropeanDate(trimmed) !== null;
+  }
   return false;
 }
 
@@ -464,7 +584,18 @@ export function normalizeValue(value: unknown, type: ColumnType): unknown {
       // that sample can still hold something unparseable. `new Date(garbage)` doesn't throw, it
       // returns an "Invalid Date" object that later blows up the whole batch insert (the pg driver
       // calls toISOString() on it, which throws) instead of just leaving that one cell empty.
-      const parsed = value instanceof Date ? value : new Date(String(value));
+      let parsed: Date;
+      if (value instanceof Date) {
+        parsed = value;
+      } else {
+        const str = String(value).trim();
+        // Same day-first convention as isDateLike — an ISO-shaped string is never re-interpreted
+        // as DD/MM (parseEuropeanDate's own pattern can't match a "YYYY-MM-DD" string anyway, but
+        // being explicit here keeps the two functions' precedence obviously in sync).
+        parsed = /^\d{4}-\d{2}-\d{2}/.test(str)
+          ? new Date(str)
+          : (parseEuropeanDate(str) ?? new Date(str));
+      }
       return Number.isNaN(parsed.getTime()) ? null : parsed;
     }
     case 'boolean':

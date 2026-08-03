@@ -31,6 +31,12 @@ export function CleanedResultPreview({
         {summary !== 'Aucun' && ` Nettoyage appliqué : ${summary}.`}
       </p>
 
+      {report.mixedCurrencyColumns?.length > 0 && (
+        <p role="alert" className="error">
+          ⚠ Colonne(s) mélangeant plusieurs devises : {report.mixedCurrencyColumns.join(', ')}. Une somme sur cette colonne combinerait des montants dans des devises différentes.
+        </p>
+      )}
+
       {rows.length === 0 ? (
         <p role="alert" className="error">
           Aucune ligne ne sera importée avec ces réglages — vérifiez l'en-tête et les exclusions.

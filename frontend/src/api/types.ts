@@ -10,6 +10,8 @@ export interface CleaningReport {
   duplicateColumnsRenamed: string[];
   /** Extra sheet names in a multi-sheet file that were NOT imported — only the first sheet is ever read. */
   skippedSheets: string[];
+  /** Columns where more than one currency symbol/code appears across rows (e.g. some "CHF 100", others "EUR 100") — a real risk of silently summing different currencies together. */
+  mixedCurrencyColumns: string[];
 }
 
 export type IngestionStatus = 'success' | 'error' | 'duplicate' | 'pending_review';

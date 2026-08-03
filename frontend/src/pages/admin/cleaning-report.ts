@@ -10,5 +10,6 @@ export function describeCleaningReport(report: CleaningReport | null): string {
   if (report.encoding !== 'utf-8') parts.push(`encodage : ${report.encoding}`);
   if (report.duplicateColumnsRenamed?.length > 0) parts.push(`colonne(s) dupliquée(s) renommée(s) : ${report.duplicateColumnsRenamed.join(', ')}`);
   if (report.skippedSheets?.length > 0) parts.push(`onglet(s) ignoré(s) : ${report.skippedSheets.join(', ')}`);
+  if (report.mixedCurrencyColumns?.length > 0) parts.push(`⚠ devises mélangées dans : ${report.mixedCurrencyColumns.join(', ')}`);
   return parts.length > 0 ? parts.join(', ') : 'Aucun';
 }

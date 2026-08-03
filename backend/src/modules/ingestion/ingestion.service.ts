@@ -7,6 +7,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { RbacService } from '../rbac/rbac.service';
 import { setLabel } from '../views/column-labels';
 import {
+  detectMixedCurrencyColumns,
   inferColumnTypes,
   normalizeColumnName,
   normalizeTableName,
@@ -139,6 +140,17 @@ export class IngestionService {
       fileName,
       correction,
     );
+    // Cheap enough to compute here too (unlike loadIntoTable, no table/schema work involved) —
+    // lets a mixed-currency column surface in the pre-import preview, not just after the fact in
+    // the journal.
+    if (rows.length > 0) {
+      const columnTypes = inferColumnTypes(rows, headers);
+      report.mixedCurrencyColumns = detectMixedCurrencyColumns(
+        rows,
+        headers,
+        columnTypes,
+      );
+    }
     return {
       headers,
       rows: rows.slice(0, CLEANED_PREVIEW_ROW_LIMIT),
@@ -248,14 +260,20 @@ export class IngestionService {
         }
       }
 
-      const rowCount = await this.loadIntoTable(tableName, rows);
+      const { rowCount, mixedCurrencyColumns } = await this.loadIntoTable(
+        tableName,
+        rows,
+      );
       const result: IngestionResult = {
         fileName,
         tableName,
         rowCount,
         status: 'success',
         errors: [],
-        cleaningReport: report,
+        // Column typing (and therefore mixed-currency detection) only happens inside
+        // loadIntoTable, after `report` was already built by parseSpreadsheet — merged in here so
+        // it still ends up in the same journaled CleaningReport as every other cleanup signal.
+        cleaningReport: { ...report, mixedCurrencyColumns },
       };
       await this.writeJournalEntry(result, fileHash);
       return result;
@@ -352,9 +370,14 @@ export class IngestionService {
   private async loadIntoTable(
     tableName: string,
     rows: Record<string, unknown>[],
-  ): Promise<number> {
+  ): Promise<{ rowCount: number; mixedCurrencyColumns: string[] }> {
     const headers = Object.keys(rows[0]);
     const columnTypes = inferColumnTypes(rows, headers);
+    const mixedCurrencyColumns = detectMixedCurrencyColumns(
+      rows,
+      headers,
+      columnTypes,
+    );
     const columns = headers.map((header, index) => ({
       source: header,
       name: normalizeColumnName(header, index),
@@ -414,7 +437,7 @@ export class IngestionService {
           .transacting(trx);
     });
 
-    return records.length;
+    return { rowCount: records.length, mixedCurrencyColumns };
   }
 
   /**
