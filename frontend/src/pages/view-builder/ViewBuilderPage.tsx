@@ -13,6 +13,7 @@ import {
   type SavedView,
   type TableSchema,
 } from '../../api/types';
+import { useProjectSelection } from '../../project-selection/ProjectSelectionContext';
 import { BLOCK_ROOT_DROP_ID, emptyBlockExpr, pathFromBlockDropId, setBlockExprAtPath, type BlockExpr } from './block-formula';
 import { CalculatedFieldEditor } from './CalculatedFieldEditor';
 import { FieldChip } from './FieldChip';
@@ -86,6 +87,7 @@ export function ViewBuilderPage() {
   const { id } = useParams<{ id: string }>();
   const isEditing = Boolean(id);
   const navigate = useNavigate();
+  const { selectedProjectId } = useProjectSelection();
   const [schemaFields, setSchemaFields] = useState<Field[]>([]);
   const [calculatedFields, setCalculatedFields] = useState<CalculatedField[]>([]);
   const [editingCalculatedField, setEditingCalculatedField] = useState<'new' | CalculatedField | null>(null);
@@ -102,11 +104,19 @@ export function ViewBuilderPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Editing an existing view fetches unscoped, regardless of the currently active project:
+    // fieldRefToField/filterConditionToField below silently fall back to dtype:'text', label:null
+    // for any shelf/filter field not found in schemaFields — a project-scoped fetch here could
+    // silently mistype a field the view already uses from a *different* project, with no error to
+    // catch it. A brand-new view is scoped, so its field picker only proposes the active project's
+    // (+ shared) fields in the first place.
+    const query = isEditing || !selectedProjectId ? '' : `?projectId=${selectedProjectId}`;
     apiClient
-      .get<TableSchema[]>('/ingestion/tables')
+      .get<TableSchema[]>(`/ingestion/tables${query}`)
       .then((schemas) => setSchemaFields(schemasToFields(schemas)))
       .catch(() => setError("Impossible de charger les champs. Importez d'abord des fichiers."));
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditing]);
 
   useEffect(() => {
     if (!id || schemaFields.length === 0) return;
